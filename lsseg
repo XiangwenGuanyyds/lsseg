@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="${LSSEG_PYTHON:-python}"
+
+if ! command -v "$PYTHON" >/dev/null 2>&1; then
+    echo "LSSeg Python interpreter not found: $PYTHON" >&2
+    echo "Set LSSEG_PYTHON to the project environment's Python executable." >&2
+    exit 1
+fi
+
+exec "$PYTHON" "$ROOT_DIR/experiment.py" "$@"

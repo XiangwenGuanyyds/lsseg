@@ -1,0 +1,51 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+*.egg-info/
+
+# IDE and OS settings
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local-only files
+/local_record/
+
+# Generated experiment artifacts
+outputs/
+runs/
+results/
+logs/
+output/
+tmp/
+backups/
+
+# Local datasets
+/dataset/
+
+# Model weights belong in release storage or Git LFS, not ordinary Git.
+*.pth
+*.pt
+*.ckpt
+
+# Common notebook and LaTeX build artifacts
+.ipynb_checkpoints/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
