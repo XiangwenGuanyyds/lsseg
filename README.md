@@ -65,6 +65,67 @@ download the ImageNet ResNet-50 weights on first use and cache them locally.
 The configuration files remain flat under `configs/` because
 `configs/__init__.py` automatically registers sibling `*_cfg.py` modules.
 
+## Dataset Setup
+
+Download `dataset.zip` from [tubCloud](https://tubcloud.tu-berlin.de/s/LDbXc9o3yyAF8fi).
+The download password is `gxwlsseg2026`.
+
+The archive contains the complete local dataset directory, including the original
+data, the prepared train/validation/test annotations, and the occlusion consensus
+groups. The original image dataset is available on
+[Roboflow Universe](https://universe.roboflow.com/nbing/pig-uebpf-eh8lw).
+
+Extract the ZIP into the project root, beside `main.py` and `configs/`.
+The archive already contains a top-level `dataset/` folder. From the project root,
+you can extract it with:
+
+```bash
+python -m zipfile -e /path/to/dataset.zip .
+```
+
+Replace `/path/to/dataset.zip` with the downloaded file's path. When using a
+graphical archive tool, place the extracted `dataset/` folder directly in the
+project root. The main files and directories should then be arranged as follows:
+
+```text
+lsseg/
+├── main.py
+├── configs/
+└── dataset/
+    ├── raw/pigs/
+    │   ├── PIG.v1i.coco-segmentation.zip
+    │   └── pig/
+    │       ├── README.roboflow.txt
+    │       ├── train/    # Original training images and COCO annotations
+    │       ├── valid/    # Original validation images and COCO annotations
+    │       └── test/     # Original test images and COCO annotations
+    └── per_scene/mix/
+        ├── train.coco.json
+        ├── val.coco.json
+        ├── test.coco.json
+        ├── build_manifest.json
+        └── occlusion_review/consensus/
+            ├── occluded.val.json
+            ├── not_occluded.val.json
+            ├── ambiguous.val.json
+            ├── occluded.test.json
+            ├── not_occluded.test.json
+            ├── ambiguous.test.json
+            └── summary.json
+```
+
+The experiment configurations use the prepared `mix` annotations to select 500
+training images, 100 validation images and 100 test images from the original
+image directories. The supplied annotations and consensus groups are ready to
+use; dataset construction and occlusion annotation do not need to be repeated.
+With this directory layout, the existing configurations work without path changes.
+
+To check the extracted dataset visually, run:
+
+```bash
+python tools/view_dataset.py mix
+```
+
 ## Standard Workflow
 
 ```bash
