@@ -8,12 +8,12 @@ class Registry:
         @MODELS.register_module()                    # uses class.__name__
         class ResNet50FPN(...): ...
 
-        @CONFIGS.register_module(name='pig_baseline_100ep')   # custom name
-        class PigBaseline100EpConfig(...): ...
+        @CONFIGS.register_module(name='baseline')   # custom name
+        class BaselineConfig(...): ...
 
     Look up:
         cls = MODELS.get('ResNet50FPN')
-        cls = CONFIGS.get('pig_baseline_100ep')
+        cls = CONFIGS.get('baseline')
     """
 
     def __init__(self, name):

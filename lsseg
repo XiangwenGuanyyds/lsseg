@@ -9,4 +9,4 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
     exit 1
 fi
 
-exec "$PYTHON" "$ROOT_DIR/experiment.py" "$@"
+exec "$PYTHON" "$ROOT_DIR/utils/experiment.py" "$@"

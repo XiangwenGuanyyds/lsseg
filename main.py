@@ -20,12 +20,15 @@ from utils.experiment_utils import get_experiment_dir
 from utils.output_paths import experiment_paths
 from utils.registry import CONFIGS
 from utils.experiment_metadata import write_train_provenance
+from utils.saved_config import load_saved_config
 
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--mode",     choices=["train", "test"], default="train")
-    p.add_argument("--config",   required=True)
+    source = p.add_mutually_exclusive_group(required=True)
+    source.add_argument("--config", help="registered public config name")
+    source.add_argument("--config-file", help="saved experiment config.json")
     p.add_argument("--exp_name", default=None)
     p.add_argument("--seed",     type=int, default=None)
     p.add_argument("--weights",  default=None,
@@ -41,9 +44,15 @@ def main():
     )
     args = p.parse_args()
 
-    cfg = CONFIGS.get(args.config)
-    if cfg is None:
-        raise ValueError(f"Unknown --config '{args.config}'. Valid: {CONFIGS.keys()}")
+    if args.config_file:
+        cfg, config_name = load_saved_config(args.config_file, Path(__file__).resolve().parent)
+    else:
+        config_name = args.config
+        cfg = CONFIGS.get(config_name)
+        if cfg is None:
+            raise ValueError(f"Unknown --config '{config_name}'. Valid: {CONFIGS.keys()}")
+    if args.mode == "train" and getattr(cfg, "TEST_ONLY", False):
+        p.error("This config is for testing. Choose its corresponding training config.")
 
     if args.exp_name is not None:
         cfg.EXP_NAME = args.exp_name
@@ -71,7 +80,7 @@ def main():
         write_train_provenance(
             cfg,
             exp_dir,
-            config_name=args.config,
+            config_name=config_name,
             command=command,
             status="running",
         )
@@ -79,7 +88,7 @@ def main():
         write_train_provenance(
             cfg,
             exp_dir,
-            config_name=args.config,
+            config_name=config_name,
             command=command,
             status="completed",
             checkpoint_path=Path(exp_dir) / "checkpoint.pth",
@@ -106,7 +115,7 @@ def main():
             cfg,
             paths,
             str(weights),
-            config_name=args.config,
+            config_name=config_name,
             command=[sys.executable, *sys.argv],
         ).test()
 

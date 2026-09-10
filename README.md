@@ -5,105 +5,82 @@ Instance segmentation experiments for occlusion-robust pig segmentation.
 ## Environment Setup
 
 The experiments use Python 3.10, PyTorch 2.7.1 and torchvision 0.22.1 on
-Linux/WSL, with the CUDA 11.8 PyTorch build. The direct dependencies are pinned
-in `requirements.txt`.
-
-Create and activate an environment:
+Linux/WSL, with CUDA 11.8.
 
 ```bash
 conda create -n lsseg python=3.10 -y
 conda activate lsseg
 ```
 
-For an NVIDIA GPU with a CUDA 11.8-compatible driver:
+Install PyTorch for an NVIDIA GPU with a CUDA 11.8-compatible driver:
 
 ```bash
 python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu118
-python -m pip install -r requirements.txt
 ```
 
-For CPU use, run these installation commands instead:
+For CPU use, install this build instead:
 
 ```bash
 python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cpu
-python -m pip install -r requirements.txt
 ```
 
-The PyTorch commands follow the [official version-specific installation instructions](https://pytorch.org/get-started/previous-versions/#v271).
-OpenCV uses the headless package; dataset viewing and annotation run in a web browser.
-
-Check the installation:
+Install the remaining dependencies and check the environment:
 
 ```bash
+python -m pip install -r requirements.txt
 python -m pip check
-python -c "import torch, torchvision; print(torch.__version__, torchvision.__version__); print('CUDA available:', torch.cuda.is_available())"
 ./lsseg --help
 ```
 
-`./lsseg` uses `python` from the active environment. To select an interpreter
-explicitly, set `LSSEG_PYTHON` to its executable path. Default model configurations
-download the ImageNet ResNet-50 weights on first use and cache them locally.
+`./lsseg` uses Python from the active environment. The model downloads and
+caches ImageNet ResNet-50 weights on first use.
 
 ## Project Structure
 
 | Path | Purpose |
 | --- | --- |
-| `experiment.py` | Recommended train, test, metric, and experiment-info interface |
-| `main.py` | Low-level training and test entry point |
-| `configs/` | Registered experiment configurations |
-| `models/` | Model architecture, heads, losses, and attention modules |
-| `data_loaders/` | Dataset parsing, transforms, and data loaders |
-| `runners/` | Training and test workflow orchestration |
-| `evaluation/` | Evaluation metrics and pipeline analysis logic |
-| `optim/` | Optimizer and scheduler builders |
-| `tools/` | Standalone dataset, evaluation, visualization, and plotting tools |
-| `dataset/` | Raw and constructed datasets |
-| `outputs/` | Training, test, and analysis outputs grouped by experiment |
-| `backups/` | Archived project backups |
-| `tmp/` | Temporary inspection artifacts |
-
-The configuration files remain flat under `configs/` because
-`configs/__init__.py` automatically registers sibling `*_cfg.py` modules.
+| `main.py` | Direct training and test entry point |
+| `configs/` | Experiment configurations |
+| `models/` | Architecture, heads and losses |
+| `data_loaders/` | Dataset parsing, transforms and data loaders |
+| `runners/` | Training and test loops |
+| `evaluation/` | Evaluation metrics and analysis |
+| `optim/` | Optimiser builders |
+| `tools/` | Dataset viewing, annotation, plotting and visualisation |
+| `dataset/` | Original data, prepared splits and consensus labels |
+| `outputs/` | Results grouped by experiment |
 
 ## Dataset Setup
 
 Download `dataset.zip` from [tubCloud](https://tubcloud.tu-berlin.de/s/LDbXc9o3yyAF8fi).
-The download password is `gxwlsseg2026`.
+Password: `gxwlsseg2026`.
 
-The archive contains the complete local dataset directory, including the original
-data, the prepared train/validation/test annotations, and the occlusion consensus
-groups. The original image dataset is available on
+The ZIP file includes the original data, prepared splits and occlusion consensus
+labels. The source dataset is available on
 [Roboflow Universe](https://universe.roboflow.com/nbing/pig-uebpf-eh8lw).
 
-Extract the ZIP into the project root, beside `main.py` and `configs/`.
-The archive already contains a top-level `dataset/` folder. From the project root,
-you can extract it with:
+Extract `dataset.zip` into the project root:
 
 ```bash
 python -m zipfile -e /path/to/dataset.zip .
 ```
 
-Replace `/path/to/dataset.zip` with the downloaded file's path. When using a
-graphical archive tool, place the extracted `dataset/` folder directly in the
-project root. The main files and directories should then be arranged as follows:
+After extraction, the `dataset/` folder should sit beside `main.py`.
+The paths used by the experiments are:
 
 ```text
 lsseg/
 ├── main.py
 ├── configs/
 └── dataset/
-    ├── raw/pigs/
-    │   ├── PIG.v1i.coco-segmentation.zip
-    │   └── pig/
-    │       ├── README.roboflow.txt
-    │       ├── train/    # Original training images and COCO annotations
-    │       ├── valid/    # Original validation images and COCO annotations
-    │       └── test/     # Original test images and COCO annotations
+    ├── raw/pigs/pig/
+    │   ├── train/
+    │   ├── valid/
+    │   └── test/
     └── per_scene/mix/
         ├── train.coco.json
         ├── val.coco.json
         ├── test.coco.json
-        ├── build_manifest.json
         └── occlusion_review/consensus/
             ├── occluded.val.json
             ├── not_occluded.val.json
@@ -114,114 +91,72 @@ lsseg/
             └── summary.json
 ```
 
-The experiment configurations use the prepared `mix` annotations to select 500
-training images, 100 validation images and 100 test images from the original
-image directories. The supplied annotations and consensus groups are ready to
-use; dataset construction and occlusion annotation do not need to be repeated.
-With this directory layout, the existing configurations work without path changes.
+The prepared `mix` splits contain 500 training, 100 validation and 100 test
+images. They are ready to use with the supplied consensus labels.
 
-To check the extracted dataset visually, run:
+Browse images by split and consensus group:
 
 ```bash
 python tools/view_dataset.py mix
 ```
 
-## Standard Workflow
+The viewer opens in a browser and prints its address in the terminal.
+
+## Train and Test
+
+See [Experiment Configurations](configs/CONFIGURATIONS.md) for the available
+configurations. Run commands from the project root.
+
+For training and testing in one command, see [Batch Scripts](#batch-scripts).
+
+Baseline:
 
 ```bash
-# Train. The experiment saves its effective config and metadata.
-./lsseg train \
-  baseline_seed0 --config baseline --seed 0
-
-# Test a trained experiment.
+./lsseg train baseline_seed0 --config baseline --seed 0
 ./lsseg test baseline_seed0
-
-# Print the final bbox and segmentation COCO AP table.
-./lsseg ap baseline_seed0
-
-# Compute overall foreground pixel metrics from the saved test predictions.
-./lsseg pixel-metrics baseline_seed0
-
-# Read and validate all pipeline-analysis outputs produced during test.
-./lsseg analyze pipeline baseline_seed0
-
-# Compute all mask-error analyses from the saved test predictions.
-./lsseg analyze mask-errors baseline_seed0
-
-# Show the config, checkpoint, test, and analysis status.
-./lsseg info baseline_seed0
 ```
 
-To evaluate one checkpoint with a different test-time configuration, use a
-separate result name:
+Final model:
 
 ```bash
-./lsseg test \
-  baseline_seed0 \
-  --config gaussian_soft_nms \
-  --result-name gaussian_soft_nms_seed0 \
-  --seed 0
+./lsseg train final_model_seed0 --config dice_residual_mask_refinement --seed 0
+./lsseg test final_model_seed0 --config final_model
 ```
 
-## Output Layout
+Training includes validation with standard NMS. Testing is a separate command;
+the Soft-NMS configurations are test-only. Repeat with seeds 1 and 2 and distinct
+experiment names for three-seed experiments.
 
-All outputs belonging to an experiment share one directory:
+Testing loads the named experiment's training checkpoint. Without `--config`,
+it uses the saved `training/config.json`; an explicit `--config` selects the
+test configuration. Use `--result-name` to keep a separate set of test results:
 
-```text
-outputs/<experiment>/
-├── training/
-│   ├── config.json
-│   ├── metadata.json
-│   ├── checkpoint.pth
-│   └── metrics/
-│       ├── train_losses.csv
-│       └── validation_mask_ap.csv
-├── test/
-│   ├── config.json
-│   ├── metadata.json
-│   ├── predictions.json
-│   ├── ground_truth/
-│   │   ├── overall.json
-│   │   ├── occluded.json
-│   │   └── not_occluded.json
-│   └── metrics/
-│       ├── mask_ap.csv
-│       └── coco_ap_report.csv
-└── analysis/
-    ├── pipeline/
-    │   ├── rpn_coverage.csv
-    │   └── postprocessing_recall.csv
-    ├── mask_errors/
-    ├── pixel_metrics/
-    └── figures/
+```bash
+./lsseg test baseline_seed0 --config gaussian_soft_nms --result-name gaussian_soft_nms_seed0
 ```
 
-RPN and post-processing outputs are collected during test. Mask-error and
-pixel-level analyses are created only when their corresponding `./lsseg`
-analysis command is run.
+Reusing an experiment name for training overwrites its training outputs.
+Repeating a test replaces the test and analysis outputs under its result name.
 
-## Plot Experiment Curves
+## Output Directories
 
-Read training CSV logs by experiment name:
+| Output directory | Contents |
+| --- | --- |
+| `outputs/<experiment>/training/` | Checkpoint, saved configuration, metadata and training/validation metrics |
+| `outputs/<experiment>/test/` | Predictions, ground truth, AP metrics, test configuration and metadata |
+| `outputs/<experiment>/analysis/` | Pipeline analysis, pixel metrics, mask-error analysis and figures |
+
+## Plot Curves
 
 ```bash
 python tools/plot.py baseline_seed0
-python tools/plot.py baseline_seed0 dice_w16_seed0
-python tools/plot.py baseline_seed0 dice_w16_seed0 --metrics all
-python tools/plot.py baseline_seed0 dice_w16_seed0 --type val
-python tools/plot.py baseline_seed0 dice_w16_seed0 --type val --groups occluded --metrics AP AP75
+python tools/plot.py baseline_seed0 final_model_seed0 --metrics all
+python tools/plot.py baseline_seed0 final_model_seed0 --type val --groups occluded --metrics AP AP75
 ```
 
-Each panel compares the same metric across experiments. Curves use all available
-epochs. Loss columns absent from an experiment are skipped with a printed message.
-For repeated epoch/group rows, the last recorded row is used.
-
-Single-experiment figures go to `outputs/<experiment>/analysis/figures/`.
-Their filenames are `training_loss.png` and `validation_mask_ap.png`;
-rerunning replaces the same file. Multi-experiment comparisons go to
-`local_record/plots/`, with a timestamp prepended to each filename.
-Directories are created as needed, and the full saved path is printed.
-Use `--output path/to/figure.png` to choose a different output path.
+Single-experiment plots are saved to `outputs/<experiment>/analysis/figures/`.
+Comparisons use timestamped filenames in `local_record/plots/`.
+Use `--output path/to/figure.png` to set the output path.
 
 ## Visualise Predictions
 
@@ -230,60 +165,47 @@ python tools/visualize.py --list-experiments
 python tools/visualize.py baseline_seed0 --list-ids
 python tools/visualize.py baseline_seed0 --image-ids 667 --list-ann-ids
 python tools/visualize.py baseline_seed0 --ann-ids 8274
-python tools/visualize.py baseline_seed0 dice_w16_seed0 --ann-ids 8274 8275
-python tools/visualize.py baseline_seed0 --image-ids 123
-python tools/visualize.py baseline_seed0 dice_w16_seed0 --image-ids 123 456
 python tools/visualize.py baseline_seed0 --image-ids 123 --view both
+python tools/visualize.py baseline_seed0 final_model_seed0 --image-ids 123 456
 ```
 
-Replace the example IDs with IDs printed by `--list-ids` or `--list-ann-ids`.
-Omitting `--image-ids` with `--list-ann-ids` lists instances from all test images.
-`--ann-ids` selects ground-truth annotation IDs and automatically finds their
-images. It generates only the selected instance crops; multiple IDs can belong
-to different images. All list commands avoid loading checkpoints and running
-inference. The experiment list includes test-only results whose saved metadata
-points to an existing training checkpoint.
+Replace the example IDs with those returned by the list commands.
+`--ann-ids` produces crops for selected ground-truth instances;
+`--view both` saves full images and instance crops. Use `--score-threshold`
+to change the default prediction score threshold of 0.5, or `--device cpu`
+to run on CPU.
 
-The script reads the saved test configuration
-and its checkpoint path; experiments without a test configuration use their
-saved training configuration and checkpoint.
+The tool uses the saved test configuration and checkpoint, falling back to the
+training configuration and checkpoint when no test configuration exists.
 
-Each image shows ground truth beside predictions from the selected experiments.
-`--view crops` produces local views around ground-truth boxes, using the same
-crop for every experiment. `--view both` saves full images and crops. The default
-prediction score threshold is 0.5; use `--score-threshold` to change it.
+Single-experiment images are saved to
+`outputs/<experiment>/analysis/visualizations/`. Comparisons use timestamped
+filenames in `local_record/visualizations/`. Both plotting tools print the saved
+paths; repeating a single-experiment plot or view replaces the corresponding image.
 
-Single-experiment images go to `outputs/<experiment>/analysis/visualizations/`,
-named by image ID and, for crops, annotation ID. Repeating the same view replaces
-that image. Multi-experiment images go to `local_record/visualizations/` with
-timestamped filenames. Missing output directories are created automatically;
-the full path of each saved PNG is printed. Use `--device cpu` to run on CPU.
+## Batch Scripts
 
-## Occlusion annotation
+Each script trains and tests one seed before moving to the next.
+Run from the project root with the project environment active.
 
-`tools/annotate_occlusion_round1.py` records the first round.
-`tools/annotate_occlusion_round2.py` records the second round independently.
-Their records are saved separately in `first_round/` and `v2/` under
-`local_record/annotation_records/<scene>/`. Missing directories are created automatically.
+| Script | Training configuration | Test configuration | Results |
+| --- | --- | --- | --- |
+| `run_baseline.sh` | `baseline` | `baseline` (standard NMS) | `outputs/baseline_seed<N>/` |
+| `run_final_model.sh` | `dice_residual_mask_refinement` | `final_model` (Thresholded Gaussian Soft-NMS) | `outputs/final_model_seed<N>/` |
 
 ```bash
-python tools/annotate_occlusion_round1.py mix
-python tools/annotate_occlusion_round2.py mix
-python tools/annotate_occlusion_consensus.py mix
+# Default: seed 0
+./run_baseline.sh
+./run_final_model.sh
+
+# One selected seed
+./run_baseline.sh --seeds 2
+./run_final_model.sh --seeds 2
+
+# Multiple seeds
+./run_baseline.sh --seeds 0 1 2
+./run_final_model.sh --seeds 0 1 2
 ```
 
-The last command checks that both rounds are complete and writes the occluded,
-not-occluded and ambiguous ID lists to
-`dataset/per_scene/mix/occlusion_review/consensus/`, as used by the experiment
-configs. The annotation commands keep their output in the local record directory.
-
-Browse images and consensus groups with the read-only viewer:
-
-```bash
-python tools/view_dataset.py mix
-```
-
-The page offers split and group filters. If consensus labels are missing, it
-shows the annotation and consensus commands. The system assigns an available
-local port, and the script opens the viewer in your browser. The address is also
-printed in the terminal.
+Each script prints the experiment list before starting. It stops if any selected
+experiment directory already exists or a training or test command fails.

@@ -1,5 +1,7 @@
 """Pooled neighboring-RoI context for mask-logit correction.
 
+Earlier experiment; unused in the final model.
+
 The standard mask branch remains the main prediction path. This optional
 branch pools each RoI to one vector, combines neighboring RoI appearance
 features with relative box geometry, and predicts a spatial mask-logit

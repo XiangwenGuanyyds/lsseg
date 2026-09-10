@@ -7,7 +7,6 @@ import sys
 import textwrap
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
 
 import matplotlib
 matplotlib.use("Agg")
@@ -22,6 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from data_loaders import build_dataset
 from models.build import build_model
 from utils.output_paths import experiment_paths
+from utils.saved_config import load_saved_config
 
 
 def local_path(value, old_root, root):
@@ -42,19 +42,11 @@ def load_experiment(root, name, device, quiet=False):
     if not config_path.is_file():
         raise FileNotFoundError(f"Saved config not found for {name}")
     saved = json.loads(config_path.read_text())
-    values = saved.get("values")
-    if not isinstance(values, dict) or not values.get("MODEL"):
-        raise ValueError(f"Invalid saved config: {config_path}")
-    old_root = Path(values.get("BASE_DIR", root))
-    for key, value in values.items():
-        if isinstance(value, str) and (key.endswith("_FILE") or key.endswith("_DIR")):
-            values[key] = str(local_path(value, old_root, root))
-    if values.get("CATEGORY_REMAP"):
-        values["CATEGORY_REMAP"] = {int(k): int(v) for k, v in values["CATEGORY_REMAP"].items()}
-    values["DEVICE"] = device
-    values["DEBUG"] = {}
-    values["DIAGNOSTICS"] = {}
-    cfg = SimpleNamespace(**values)
+    cfg, _ = load_saved_config(config_path, root)
+    old_root = Path(saved["values"].get("BASE_DIR", root))
+    cfg.DEVICE = device
+    cfg.DEBUG = {}
+    cfg.DIAGNOSTICS = {}
 
     weights = paths.checkpoint
     metadata_path = config_path.with_name("metadata.json")

@@ -56,7 +56,7 @@ class BaselineConfig:
     TEST_PIPELINE = [{"type": "ToTensor"}]
 
     MODEL = {
-        "type": "Architecture",
+        "type": "MaskRCNN",
         "full_maskrcnn_weights": None,
         "resnet50_body_weights": "IMAGENET1K_V2",
         "trainable_resnet_layers": 3,

@@ -22,6 +22,7 @@ Thumbs.db
 
 # Local-only files
 /local_record/
+/configs/archive/
 
 # Generated experiment artifacts
 outputs/

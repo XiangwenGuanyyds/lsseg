@@ -1,13 +1,6 @@
-"""Stock torchvision Mask R-CNN — sanity baseline for the decomposed Architecture.
+"""Earlier comparison using torchvision's complete Mask R-CNN forward path.
 
-Backbone is initialized from ImageNet-pretrained ResNet50; everything else
-(RPN, RoI heads, mask FCN) is random init. This matches the standard
-training-from-scratch setup in Detectron2 / mmdetection / the Mask R-CNN
-paper, and aligns with the decomposed Architecture which also uses
-ImageNet-only pretraining.
-
-If the AP this produces differs from the decomposed Architecture pipeline
-by more than expected seed/training noise, the decomposition has a bug.
+The thesis baseline and final model use models.mask_rcnn.MaskRCNN.
 """
 
 import torch.nn as nn

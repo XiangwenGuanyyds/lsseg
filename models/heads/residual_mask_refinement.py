@@ -15,7 +15,6 @@ from torchvision.ops import MultiScaleRoIAlign
 from utils import MODELS
 
 
-@MODELS.register_module(name="GatedResidualRefinementHead")
 @MODELS.register_module()
 class ResidualMaskRefinementHead(nn.Module):
     """Refine one foreground mask-logit channel with high-resolution features."""
@@ -30,11 +29,11 @@ class ResidualMaskRefinementHead(nn.Module):
         sampling_ratio=2,
         output_size=56,
         high_resolution_encoder_mode="local",
-        gate_kernel_size=3,
+        uncertainty_pool_kernel_size=3,
         foreground_class=1,
         detach_coarse_context=True,
-        use_spatial_weight=True,
-        use_spatial_weight_in_predictor=True,
+        use_uncertainty_weight=True,
+        use_uncertainty_weight_in_predictor=True,
     ):
         super().__init__()
         if (
@@ -49,13 +48,13 @@ class ResidualMaskRefinementHead(nn.Module):
             raise ValueError(
                 "output_size must be greater than or equal to roi_output_size."
             )
-        if gate_kernel_size <= 0 or gate_kernel_size % 2 == 0:
-            raise ValueError("gate_kernel_size must be a positive odd integer.")
+        if uncertainty_pool_kernel_size <= 0 or uncertainty_pool_kernel_size % 2 == 0:
+            raise ValueError("uncertainty_pool_kernel_size must be a positive odd integer.")
         if foreground_class < 0:
             raise ValueError("foreground_class must be non-negative.")
         if not featmap_names:
             raise ValueError("featmap_names must contain at least one FPN level.")
-        valid_encoder_modes = {"local", "channel_projection", "identity"}
+        valid_encoder_modes = {"local", "conv1x1", "identity"}
         if high_resolution_encoder_mode not in valid_encoder_modes:
             raise ValueError(
                 "high_resolution_encoder_mode must be one of "
@@ -65,14 +64,13 @@ class ResidualMaskRefinementHead(nn.Module):
 
         self.roi_output_size = (int(roi_output_size), int(roi_output_size))
         self.output_size = (int(output_size), int(output_size))
-        self.gate_kernel_size = int(gate_kernel_size)
+        self.uncertainty_pool_kernel_size = int(uncertainty_pool_kernel_size)
         self.foreground_class = int(foreground_class)
         self.detach_coarse_context = bool(detach_coarse_context)
-        self.use_spatial_weight = bool(use_spatial_weight)
-        # This switch is effective only when spatial weighting itself is on,
-        # preserving the existing no-spatial-weight configuration.
-        self.use_spatial_weight_in_predictor = bool(
-            self.use_spatial_weight and use_spatial_weight_in_predictor
+        self.use_uncertainty_weight = bool(use_uncertainty_weight)
+        # Predictor input uses the weight only when uncertainty weighting is enabled.
+        self.use_uncertainty_weight_in_predictor = bool(
+            self.use_uncertainty_weight and use_uncertainty_weight_in_predictor
         )
         self.featmap_names = tuple(str(name) for name in featmap_names)
         self.high_resolution_encoder_mode = str(high_resolution_encoder_mode)
@@ -107,9 +105,8 @@ class ResidualMaskRefinementHead(nn.Module):
                 nn.ReLU(inplace=True),
             )
             residual_feature_channels = int(hidden_channels)
-        elif self.high_resolution_encoder_mode == "channel_projection":
-            # This ablation keeps only channel projection and removes the two
-            # spatial 3x3 convolutions used by the default local encoder.
+        elif self.high_resolution_encoder_mode == "conv1x1":
+            # Combine feature channels with one 1x1 convolution.
             self.high_resolution_encoder = nn.Sequential(
                 nn.Conv2d(
                     int(in_channels),
@@ -124,7 +121,7 @@ class ResidualMaskRefinementHead(nn.Module):
             residual_feature_channels = int(in_channels)
 
         residual_context_channels = 1 + int(
-            self.use_spatial_weight_in_predictor
+            self.use_uncertainty_weight_in_predictor
         )
         self.residual_predictor = nn.Sequential(
             nn.Conv2d(
@@ -217,31 +214,31 @@ class ResidualMaskRefinementHead(nn.Module):
             high_resolution_features
         )
 
-        coarse_foreground = aligned_logits[
+        coarse_instance_logits = aligned_logits[
             :, self.foreground_class : self.foreground_class + 1
         ]
         coarse_context = (
-            coarse_foreground.detach()
+            coarse_instance_logits.detach()
             if self.detach_coarse_context
-            else coarse_foreground
+            else coarse_instance_logits
         )
-        if self.use_spatial_weight:
-            foreground_probability = coarse_context.sigmoid()
+        if self.use_uncertainty_weight:
+            instance_mask_probability = coarse_context.sigmoid()
             uncertainty = (
-                4.0 * foreground_probability * (1.0 - foreground_probability)
+                4.0 * instance_mask_probability * (1.0 - instance_mask_probability)
             )
-            gate = F.max_pool2d(
+            uncertainty_weight = F.max_pool2d(
                 uncertainty,
-                kernel_size=self.gate_kernel_size,
+                kernel_size=self.uncertainty_pool_kernel_size,
                 stride=1,
-                padding=self.gate_kernel_size // 2,
+                padding=self.uncertainty_pool_kernel_size // 2,
             )
         else:
-            gate = None
+            uncertainty_weight = None
 
-        if self.use_spatial_weight_in_predictor:
+        if self.use_uncertainty_weight_in_predictor:
             residual_input = torch.cat(
-                (high_resolution_features, coarse_context, gate),
+                (high_resolution_features, coarse_context, uncertainty_weight),
                 dim=1,
             )
         else:
@@ -251,15 +248,15 @@ class ResidualMaskRefinementHead(nn.Module):
             )
 
         residual_logits = self.residual_predictor(residual_input)
-        if gate is None:
-            refined_foreground = coarse_foreground + residual_logits
+        if uncertainty_weight is None:
+            refined_instance_logits = coarse_instance_logits + residual_logits
         else:
-            refined_foreground = coarse_foreground + gate * residual_logits
+            refined_instance_logits = coarse_instance_logits + uncertainty_weight * residual_logits
 
         return torch.cat(
             (
                 aligned_logits[:, : self.foreground_class],
-                refined_foreground,
+                refined_instance_logits,
                 aligned_logits[:, self.foreground_class + 1 :],
             ),
             dim=1,

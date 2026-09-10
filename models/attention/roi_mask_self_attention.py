@@ -1,5 +1,7 @@
 """RoI-level self-attention for the Mask R-CNN mask branch.
 
+Earlier experiment; unused in the final model.
+
 The module treats one complete RoI feature map as one token.  It is inserted
 between ``mask_roi_pool`` and the original ``mask_head`` and returns the same
 four-dimensional tensor shape as its input.

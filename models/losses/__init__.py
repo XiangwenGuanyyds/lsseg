@@ -1,4 +1,4 @@
-from .inst_seg_loss import LossAggregator
+from .loss_aggregator import LossAggregator
 from .mask_rcnn_losses import (
     bce_boundary_loss_dict,
     bce_dice_boundary_loss_dict,

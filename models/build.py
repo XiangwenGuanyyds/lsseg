@@ -5,6 +5,9 @@ from utils import MODELS
 def build_model(cfg):
     """Build and move the configured model to its target device."""
     model_type = cfg.MODEL["type"]
+    # Earlier config snapshots used this model name.
+    if model_type == "Architecture":
+        model_type = "MaskRCNN"
     model_cls = MODELS.get(model_type)
     if model_cls is None:
         raise KeyError(

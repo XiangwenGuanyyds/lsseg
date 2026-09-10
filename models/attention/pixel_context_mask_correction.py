@@ -1,5 +1,7 @@
 """Pixel-level context correction for the Mask R-CNN mask branch.
 
+Earlier experiment; unused in the final model.
+
 The module keeps the standard mask head as the main prediction path. For each
 RoI, its spatial RoI features provide the queries, while spatial features from
 nearby RoIs provide keys and values. A relative-position bias is added to the

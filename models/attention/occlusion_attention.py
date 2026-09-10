@@ -1,3 +1,8 @@
+"""Earlier experiment: spatial attention and learned feature gating on FPN maps.
+
+Unused in the final model.
+"""
+
 import torch
 import torch.nn as nn
 from utils import MODELS

@@ -1,5 +1,7 @@
 """RoI relation refinement for box-branch spatial features.
 
+Earlier experiment; unused in the final model.
+
 The module is optional and is only constructed when the config provides
 ``cfg.MODEL["box_roi_relation_refinement"]``. It builds per-image RoI
 relations from proposal geometry and pooled RoI features, then injects the

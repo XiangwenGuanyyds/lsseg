@@ -2,20 +2,27 @@
 
 from utils.registry import CONFIGS
 
-from .gated_residual_refinement_cfg import GatedResidualRefinementConfig
+from .baseline_cfg import BaselineConfig
 
 
 @CONFIGS.register_module(name="residual_mask_refinement")
-class ResidualMaskRefinementConfig(GatedResidualRefinementConfig):
+class ResidualMaskRefinementConfig(BaselineConfig):
     MODEL = {
-        **GatedResidualRefinementConfig.MODEL,
+        **BaselineConfig.MODEL,
         "residual_mask_refinement": {
-            **GatedResidualRefinementConfig.MODEL[
-                "residual_mask_refinement"
-            ],
-            "high_resolution_encoder_mode": "channel_projection",
+            "type": "ResidualMaskRefinementHead",
+            "in_channels": 256,
+            "hidden_channels": 64,
+            "featmap_names": ("0",),
+            "roi_output_size": 28,
+            "sampling_ratio": 2,
+            "output_size": 56,
+            "uncertainty_pool_kernel_size": 3,
+            "foreground_class": 1,
+            "detach_coarse_context": True,
+            "high_resolution_encoder_mode": "conv1x1",
             "refinement_feature_channels": 64,
-            "use_spatial_weight": True,
-            "use_spatial_weight_in_predictor": True,
+            "use_uncertainty_weight": True,
+            "use_uncertainty_weight_in_predictor": False,
         },
     }

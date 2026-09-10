@@ -1,5 +1,7 @@
 """Convolutional Block Attention Module (CBAM).
 
+Earlier FPN attention experiment; unused in the final model.
+
 This module implements the channel-attention and spatial-attention blocks
 introduced by:
 
