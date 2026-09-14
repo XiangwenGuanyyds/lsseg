@@ -22,8 +22,3 @@ before they are added to the coarse mask logits.
 Earlier experiments are retained in `attention/`, `native/`,
 `heads/box_overlap_refinement.py` and `heads/roi_relation_refinement.py`.
 Boundary mask loss and GIoU box loss are also retained as experimental options.
-
-Saved experiment configs and checkpoints can contain earlier names. The CLI
-loads saved settings through `utils/saved_config.py`; model-name conversion is
-handled in `build.py` and `mask_rcnn.py`. Current code uses the names above;
-saved results and experiment directory names are preserved.

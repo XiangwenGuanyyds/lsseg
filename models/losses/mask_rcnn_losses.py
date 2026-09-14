@@ -1,8 +1,16 @@
+# Torchvision-derived portions: BSD-3-Clause.
+# Copyright (c) Soumith Chintala 2016,
+# All rights reserved.
+# Full licence: LICENSES/torchvision.txt (repository root).
+
 """Mask R-CNN mask targets and configurable mask losses.
 
-The target projection follows torchvision's Mask R-CNN implementation. All
-mask-loss variants used by experiment configurations are registered here so
-there is one implementation path for BCE, Dice, and boundary supervision.
+Target projection and BCE mask loss adapted from torchvision v0.22.1:
+https://github.com/pytorch/vision/blob/v0.22.1/torchvision/models/detection/roi_heads.py
+    project_masks_on_boxes and maskrcnn_loss.
+
+Local changes: shared target preparation, loss registry wrappers,
+and additional Dice and boundary loss options.
 """
 
 from scipy.ndimage import distance_transform_edt
@@ -16,9 +24,8 @@ from utils import MASK_LOSSES
 def project_masks_on_boxes(gt_masks, boxes, matched_idxs, mask_size):
     """Crop and resize matched ground-truth masks to the mask output size.
 
-    This function is copied from torchvision 0.22.1
+    From torchvision 0.22.1:
     ``torchvision.models.detection.roi_heads.project_masks_on_boxes``.
-    Only argument names and this documentation were clarified.
     """
     matched_idxs = matched_idxs.to(boxes)
     rois = torch.cat([matched_idxs[:, None], boxes], dim=1)
@@ -65,6 +72,7 @@ def _prepare_mask_loss_inputs(
 
     row_indices = torch.arange(labels.shape[0], device=labels.device)
     pred_mask_logits = mask_logits[row_indices, labels]
+    # print('[debug] selected logits', pred_mask_logits.shape, 'targets', mask_targets.shape)
     return pred_mask_logits, mask_targets
 
 
@@ -98,6 +106,7 @@ def dice_loss(pred_mask_logits, mask_targets, smooth=1.0):
     intersection = (pred_probs * targets).sum(dim=1)
     denominator = pred_probs.sum(dim=1) + targets.sum(dim=1)
     dice = (2.0 * intersection + smooth) / (denominator + smooth)
+    # print("[debug] Dice per RoI", dice.detach()[:5])
     return (1.0 - dice).mean()
 
 

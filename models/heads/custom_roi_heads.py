@@ -1,6 +1,18 @@
+# Torchvision-derived portions: BSD-3-Clause.
+# Copyright (c) Soumith Chintala 2016,
+# All rights reserved.
+# Full licence: LICENSES/torchvision.txt (repository root).
+
 """RoI heads, box experiments and NMS switch here.
 
-Adapted from torchvision 0.22.1: detection.faster_rcnn and detection.roi_heads.
+Adapted from torchvision v0.22.1:
+https://github.com/pytorch/vision/blob/v0.22.1/torchvision/models/detection/faster_rcnn.py
+    TwoMLPHead.forward and FastRCNNPredictor.forward: box-head computation.
+https://github.com/pytorch/vision/blob/v0.22.1/torchvision/models/detection/roi_heads.py
+    RoIHeads.postprocess_detections and fastrcnn_loss.
+
+Local changes: optional box refinement, configurable NMS and regression loss,
+and candidate records for recall evaluation.
 Mask loss code: models.losses.mask_rcnn_losses
 """
 

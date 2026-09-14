@@ -15,9 +15,7 @@ def build_optimizer(cfg, model):
     if optimizer_cls is None:
         raise KeyError(f"Optimizer '{optimizer_type}' is not registered!")
 
-    # Optional: per-parameter-group LR. When OPTIMIZER["param_groups"] is not
-    # present (every existing config), behavior is bit-identical to the old
-    # single-group path below.
+    # Optional learning rates per parameter group.
     param_groups_cfg = opt_cfg.pop('param_groups', None)
 
     if param_groups_cfg is None:

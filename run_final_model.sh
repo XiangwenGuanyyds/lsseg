@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# Train Dice + Residual Mask Refinement, then test with Thresholded Gaussian
-# Soft-NMS. Validation during training uses standard NMS.
-# Run from the project root with the project environment active:
+# Train: Dice + Residual Mask Refinement, standard NMS validation.
+# Test: Thresholded Gaussian Soft-NMS.
+# Project root, project environment:
 #   ./run_final_model.sh                 # seed 0
 #   ./run_final_model.sh --seeds 2       # one seed
 #   ./run_final_model.sh --seeds 0 1 2   # three seeds, run in this order
 # Results: outputs/final_model_seed<N>/
-# An existing experiment directory or a failed command stops the batch.
+# Stop on existing directories or command failure.
 
 set -euo pipefail
 

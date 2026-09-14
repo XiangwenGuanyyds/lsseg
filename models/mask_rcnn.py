@@ -1,8 +1,18 @@
+# Torchvision-derived portions: BSD-3-Clause.
+# Copyright (c) Soumith Chintala 2016,
+# All rights reserved.
+# Full licence: LICENSES/torchvision.txt (repository root).
+
 """ResNet-50-FPN Mask R-CNN used by the baseline and final model.
 
-The box and mask branches follow torchvision's prediction pipeline.
-Configs select mask losses, Residual Mask Refinement, and box NMS.
-Earlier attention and box-refinement experiments are optional.
+Forward pipeline adapted from torchvision v0.22.1:
+https://github.com/pytorch/vision/blob/v0.22.1/torchvision/models/detection/generalized_rcnn.py
+    GeneralizedRCNN.forward.
+https://github.com/pytorch/vision/blob/v0.22.1/torchvision/models/detection/roi_heads.py
+    RoIHeads.forward: box and mask branches.
+
+Local changes: configurable losses and NMS, Residual Mask Refinement,
+optional attention and box refinement, and evaluation diagnostics.
 """
 
 import torch
@@ -33,9 +43,7 @@ class MaskRCNN(nn.Module):
                 "(or 'head.num_classes' for legacy configs)."
             )
 
-        # Initialization is named by the module that actually receives the
-        # weights. In torchvision, ``weights_backbone`` initializes only the
-        # ResNet body; the FPN is constructed afterwards and starts randomly.
+        # ResNet weights and trainable stages.
         full_maskrcnn_weights = cfg.MODEL.get("full_maskrcnn_weights", None)
         resnet50_body_weights = cfg.MODEL.get(
             "resnet50_body_weights", "IMAGENET1K_V2"
@@ -71,35 +79,30 @@ class MaskRCNN(nn.Module):
             trainable_resnet_layers,
         )
 
-        # torchvision always trains all five ResNet stages when neither set
-        # of weights is loaded. Passing None selects that behavior without its
-        # otherwise unavoidable warning; the validation above keeps it explicit.
+        # Random initialisation: train all ResNet stages.
         torchvision_trainable_layers = trainable_resnet_layers
         if full_maskrcnn_weights is None and resnet50_body_weights is None:
             torchvision_trainable_layers = None
 
         m = maskrcnn_resnet50_fpn(
-            # ``weights`` loads a complete detection checkpoint, including
-            # ResNet, FPN, RPN, box head, and mask head.
+            # Full detector weights.
             weights=full_maskrcnn_weights,
-            # Despite torchvision's name, this argument initializes only the
-            # ResNet-50 body. It does not initialize the FPN.
+            # ResNet body weights.
             weights_backbone=resnet50_body_weights,
             trainable_backbone_layers=torchvision_trainable_layers,
             num_classes=num_classes,
         )
 
-        # Top-level pre-RoI sub-modules.
+        # Image transform, backbone, RPN.
         self.transform = m.transform
         self.backbone  = m.backbone
         self.rpn       = m.rpn
 
-        # CustomRoIHeads provides the configurable box loss and NMS paths.
+        # Configurable box loss and NMS.
         self.roi_heads = m.roi_heads
         self.roi_heads.__class__ = CustomRoIHeads
 
-        # Box branch — only the ROI pool is exposed at top level; box_head /
-        # box_predictor are called via ``self.roi_heads.box_head_forward``.
+        # Box head called through roi_heads.box_head_forward.
         self.box_roi_pool = m.roi_heads.box_roi_pool
 
         # Mask branch.
@@ -107,44 +110,26 @@ class MaskRCNN(nn.Module):
         self.mask_head      = m.roi_heads.mask_head
         self.mask_predictor = m.roi_heads.mask_predictor
 
-        # Optional feature-level attention module. Baseline configs omit
-        # cfg.MODEL["attention"], leaving this as Identity and preserving
-        # vanilla behavior. CBAM experiments apply the module to each FPN
-        # feature map after the backbone and before RPN/ROI heads.
+        # FPN attention, before RPN and RoI heads.
         self.attention = self._build_attention(cfg)
 
-        # Optional RoI-level attention module for the mask branch. Baseline
-        # configs omit cfg.MODEL["mask_attention"], leaving this as Identity.
-        # The surrounding mask-branch call sequence follows torchvision's
-        # RoIHeads.forward; this hook is inserted between mask_roi_pool and
-        # mask_head.
+        # RoI attention, between mask pooling and mask head.
         self.mask_attention = self._build_mask_attention(cfg)
         self.mask_correction = self._build_mask_correction(cfg)
         self.residual_mask_refinement = self._build_residual_mask_refinement(cfg)
 
-        # Optional proposal-overlap refinement for box regression. Baseline
-        # configs omit cfg.MODEL["box_overlap_refinement"], leaving this unset
-        # and preserving the original box head.
+        # Proposal overlap features for box regression.
         self.roi_heads._box_overlap_refinement = self._build_box_overlap_refinement(cfg)
 
-        # Optional RoI relation refinement for box-branch spatial features.
-        # Baseline configs omit cfg.MODEL["box_roi_relation_refinement"], leaving
-        # this unset and preserving the original RoI box feature path.
+        # RoI relations in the box branch.
         self.roi_heads._box_roi_relation_refinement = self._build_box_roi_relation_refinement(cfg)
 
-        # External orchestrator (training class) sets this to a dict during
-        # val passes (with epoch / log_dir / diagnostics flags); diagnostic
-        # functions read it and stay no-op when it's None.
+        # Epoch, output paths and diagnostic flags from the runner.
         self.state = None
 
-        # DEBUG flags fire on every forward (train + val); cfg.DEBUG is the
-        # dict from the cfg, fpn_input / fpn_output toggle the two prints
-        # in forward.
         self.debug = getattr(cfg, "DEBUG", {}) or {}
 
-        # Mask loss is selected once at build-time via cfg; default keeps the
-        # vanilla BCE path. forward() never touches the registry — it only
-        # calls self.mask_loss_fn.
+        # Mask loss from config; BCE by default.
         mask_loss_name = cfg.MODEL.get("mask_loss", "maskrcnn_loss")
         self.mask_loss_fn = MASK_LOSSES.get(mask_loss_name)
         if self.mask_loss_fn is None:
@@ -153,13 +138,10 @@ class MaskRCNN(nn.Module):
                 f"available: {MASK_LOSSES.keys()}"
             )
 
-        # Select NMS once and pass it to the RoI heads.
+        # NMS selection.
         nms_cfg = cfg.MODEL.get("box_nms", {"type": "standard_nms"})
         nms_kwargs = dict(nms_cfg)
         nms_type = nms_kwargs.pop("type")
-        nms_type = {"vanilla": "standard_nms", "soft_nms": "gaussian_soft_nms"}.get(
-            nms_type, nms_type
-        )
         nms_thresh = nms_kwargs.pop("nms_thresh", None)
         if nms_thresh is not None:
             nms_thresh = float(nms_thresh)
@@ -177,9 +159,7 @@ class MaskRCNN(nn.Module):
         self.roi_heads._nms_fn     = nms_fn
         self.roi_heads._nms_kwargs = nms_kwargs
 
-        # Box-head regression loss (cfg-swappable). Default "smooth_l1" is
-        # bit-identical to upstream torchvision fastrcnn_loss. cfg can switch
-        # to "giou" (or any future variant in BOX_REG_LOSSES).
+        # Box regression loss, default Smooth L1.
         reg_loss_name = cfg.MODEL.get("box_reg_loss", "smooth_l1")
         self.box_reg_loss_fn = BOX_REG_LOSSES.get(reg_loss_name)
         if self.box_reg_loss_fn is None:
@@ -260,48 +240,13 @@ class MaskRCNN(nn.Module):
             )
         return correction_cls(**correction_kwargs)
 
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict,
-        missing_keys, unexpected_keys, error_msgs,
-    ):
-        # earlier checkpoints used this module prefix
-        old_prefix = prefix + "gated_residual_refinement."
-        new_prefix = prefix + "residual_mask_refinement."
-        for key in list(state_dict):
-            if key.startswith(old_prefix):
-                new_key = new_prefix + key[len(old_prefix):]
-                if new_key in state_dict:
-                    error_msgs.append(f"Duplicate refinement weights: {key} and {new_key}")
-                else:
-                    state_dict[new_key] = state_dict.pop(key)
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs,
-        )
-
     def _build_residual_mask_refinement(self, cfg):
-        refinement_cfg = cfg.MODEL.get(
-            "residual_mask_refinement", cfg.MODEL.get("gated_residual_refinement")
-        )
+        refinement_cfg = cfg.MODEL.get("residual_mask_refinement")
         if not refinement_cfg:
             return None
 
         refinement_kwargs = dict(refinement_cfg)
         refinement_type = refinement_kwargs.pop("type")
-        # Read the names stored in earlier experiment configs.
-        if refinement_type == "GatedResidualRefinementHead":
-            refinement_type = "ResidualMaskRefinementHead"
-        old_fields = {
-            "gate_kernel_size": "uncertainty_pool_kernel_size",
-            "use_spatial_weight": "use_uncertainty_weight",
-            "use_spatial_weight_in_predictor": "use_uncertainty_weight_in_predictor",
-        }
-        for old, current in old_fields.items():
-            if old in refinement_kwargs:
-                value = refinement_kwargs.pop(old)
-                refinement_kwargs.setdefault(current, value)
-        if refinement_kwargs.get("high_resolution_encoder_mode") == "channel_projection":
-            refinement_kwargs["high_resolution_encoder_mode"] = "conv1x1"
         refinement_cls = MODELS.get(refinement_type)
         if refinement_cls is None:
             raise KeyError(
@@ -344,39 +289,32 @@ class MaskRCNN(nn.Module):
         original_image_sizes = [(img.shape[-2], img.shape[-1]) for img in x]
         diagnostics = self.state.get("diagnostics", {}) if self.state else {}
 
-        # ── transform / backbone / rpn ─────────────────────────────────
+        # Transform and FPN features.
         images, targets = self.transform(x, targets)
-        if self.debug.get("fpn_input"):
-            print(f"[DEBUG/fpn_input] images.tensors={tuple(images.tensors.shape)} "
-                  f"image_sizes={images.image_sizes}")
+        # print('[debug] resized', images.tensors.shape, images.image_sizes)
         features = self.backbone(images.tensors)
-        if self.debug.get("fpn_output"):
-            shapes = ", ".join(f"{k}={tuple(v.shape)}" for k, v in features.items())
-            print(f"[DEBUG/fpn_output] {shapes}")
+        # print("[debug] FPN", {k: v.shape for k, v in features.items()})
         features = self.attention(features)
         proposals, proposal_losses = self.rpn(images, features, targets)
         accumulate_rpn_coverage(proposals, targets, self.state)
 
-        # ── RoI: training-time sampling ────────────────────────────────
+        # Training RoI samples.
         if self.training:
             proposals, matched_idxs, labels, regression_targets = \
                 self.roi_heads.select_training_samples(proposals, targets)
         else:
             matched_idxs = labels = regression_targets = None
 
-        # ── BOX branch ─────────────────────────────────────────────────
+        # Box branch
         box_features = self.box_roi_pool(features, proposals, images.image_sizes)
-        if self.debug.get("roi_align_output"):
-            print(f"[DEBUG/roi_align_output] box_features={tuple(box_features.shape)}")
+        # print('[debug] box RoIs:', box_features.shape)
         class_logits, box_regression = self.roi_heads.box_head_forward(
             box_features,
             proposals,
             matched_idxs=matched_idxs,
             labels=labels,
         )
-        if self.debug.get("box_output"):
-            print(f"[DEBUG/box_output] class_logits={tuple(class_logits.shape)} "
-                  f"box_regression={tuple(box_regression.shape)}")
+        # print("[debug]", class_logits.shape, "box offsets", box_regression.shape)
 
         detector_losses = {}
         result = []
@@ -407,7 +345,7 @@ class MaskRCNN(nn.Module):
                     targets,
                     self.state,
                 )
-        # ── MASK branch ────────────────────────────────────────────────
+        # Mask branch.
         if self.training:
             mask_proposals = []
             pos_matched_idxs = []
@@ -419,13 +357,9 @@ class MaskRCNN(nn.Module):
             mask_proposals = [r["boxes"] for r in result]
             pos_matched_idxs = None
 
-        if self.debug.get("mask_input"):
-            n_per = [int(p.shape[0]) for p in mask_proposals]
-            print(f"[DEBUG/mask_input] proposal_count_per_image={n_per}  "
-                  f"(mode={'train' if self.training else 'eval'})")
+        # print('[debug] mask counts', [len(p) for p in mask_proposals])
         mask_features = self.mask_roi_pool(features, mask_proposals, images.image_sizes)
-        if self.debug.get("mask_input"):
-            print(f"[DEBUG/mask_input] mask_features (post-RoIAlign)={tuple(mask_features.shape)}")
+        # print("[debug] pooled masks", mask_features.shape)
         if isinstance(self.mask_attention, nn.Identity):
             mask_features = self.mask_attention(mask_features)
         else:
@@ -439,12 +373,10 @@ class MaskRCNN(nn.Module):
                 roi_counts=roi_counts,
                 roi_boxes=mask_proposals,
             )
-        if self.debug.get("mask_input"):
-            print(f"[DEBUG/mask_input] mask_features (post-mask-attention)={tuple(mask_features.shape)}")
         mask_features = self.mask_head(mask_features)
         mask_logits   = self.mask_predictor(mask_features)
-        # Baseline shape check: [num_rois, num_classes, 28, 28].
-        # print(f"[SHAPE/mask_predictor] mask_logits={tuple(mask_logits.shape)}")
+        # [num_rois, num_classes, 28, 28]
+        # print('[debug] mask logits', mask_logits.shape)
         if mask_delta is not None and mask_delta.numel() > 0:
             mask_delta = F.interpolate(
                 mask_delta,
@@ -475,7 +407,7 @@ class MaskRCNN(nn.Module):
             for mask_prob, r in zip(masks_probs, result):
                 r["masks"] = mask_prob
 
-        # ── postprocess (eval only) ────────────────────────────────────
+        # Back to original image size.
         if not self.training:
             result = self.transform.postprocess(
                 result, images.image_sizes, original_image_sizes,

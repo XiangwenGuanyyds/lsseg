@@ -1,4 +1,4 @@
-"""Test the Dice model with Thresholded Gaussian Soft-NMS; refinement is removed."""
+"""Dice + Thresholded Gaussian Soft-NMS ablation."""
 
 from utils.registry import CONFIGS
 from .dice_cfg import DiceConfig

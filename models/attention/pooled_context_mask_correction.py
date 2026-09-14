@@ -1,11 +1,7 @@
 """Pooled neighboring-RoI context for mask-logit correction.
 
-Earlier experiment; unused in the final model.
-
-The standard mask branch remains the main prediction path. This optional
-branch pools each RoI to one vector, combines neighboring RoI appearance
-features with relative box geometry, and predicts a spatial mask-logit
-correction for the target RoI.
+Earlier experiment. One pooled vector per RoI; neighbour appearance and
+relative box geometry for mask-logit correction.
 """
 
 import torch
@@ -63,8 +59,7 @@ class PooledContextMaskCorrection(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(self.context_dim, 1, kernel_size=1),
         )
-        # Keep the optional branch initially identical to the standard mask
-        # path. The branch learns a correction during subsequent training.
+        # Zero initial correction.
         nn.init.zeros_(self.decoder[-1].weight)
         nn.init.zeros_(self.decoder[-1].bias)
 

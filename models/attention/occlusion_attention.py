@@ -1,6 +1,5 @@
 """Earlier experiment: spatial attention and learned feature gating on FPN maps.
 
-Unused in the final model.
 """
 
 import torch
@@ -58,8 +57,8 @@ class OcclusionAwareAttention(nn.Module):
         new_features = {}
 
         for k, v in features.items():
-            attn_feat, _ = self.spatial_attention(v)     # 空间注意力后的特征
-            refined_feat = self.refine_conv(attn_feat)   # 局部增强特征
+            attn_feat, _ = self.spatial_attention(v)     # spatial attention
+            refined_feat = self.refine_conv(attn_feat)   # local features
             gate = self.gate_map(refined_feat)           # [B,1,H,W]
 
             out = v + gate * refined_feat

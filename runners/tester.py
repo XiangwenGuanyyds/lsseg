@@ -1,9 +1,6 @@
-"""Load one checkpoint and write a complete test output for an experiment.
+"""Checkpoint testing.
 
-Mirrors the eval portion of Trainer.validate() but standalone — no
-train_loader, optimizer, scheduler, or criterion. Test predictions, metrics,
-ground truth, and pipeline analysis are written to
-their canonical subdirectories under ``outputs/<experiment>/``.
+Predictions, metrics, GT and pipeline reports under outputs/<experiment>/.
 """
 
 import os
@@ -44,7 +41,7 @@ class Tester:
         self.model.load_state_dict(state_dict)
         print(f"[checkpoint] loaded complete trained model state: {weights}")
 
-        # A repeated test invalidates every derived test and analysis output.
+        # Clear previous test results and derived analysis.
         shutil.rmtree(paths.test, ignore_errors=True)
         shutil.rmtree(paths.analysis, ignore_errors=True)
         paths.test.mkdir(parents=True, exist_ok=True)
@@ -54,7 +51,7 @@ class Tester:
         self.log_dir = str(paths.test_metrics)
 
     def test(self):
-        # state for in-forward diagnostics; epoch=0 since test is one-shot.
+        # Test diagnostics, epoch 0.
         self.model.state = {
             "epoch":       0,
             "log_dir":     self.log_dir,
@@ -82,11 +79,11 @@ class Tester:
                     for t in targets
                 ]
                 predictions = self.model(inputs, model_targets)
+                # print('[debug] test masks', [p['masks'].shape for p in predictions])
                 image_ids = [int(t["image_id"].item()) for t in targets]
                 mask_ap.update_batch(predictions, image_ids)
 
-        # dump BEFORE compute() — COCOeval mutates GT segmentation into bytes
-        # RLE counts in-place, which breaks json serialization downstream.
+        # Save JSON before COCOeval converts GT masks to byte RLEs.
         mask_ap.dump(self.exp_dir, str(self.paths.ground_truth))
         result = mask_ap.compute()
         self.model.state["mask_ap_result"] = result

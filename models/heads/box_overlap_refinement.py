@@ -1,9 +1,7 @@
-"""Experimental box refinement, not used in the final method.
+"""Earlier box-regression experiment using proposal overlaps.
 
-This module tests whether overlap between proposals can help box localisation
-when instances are close together. It collects overlap statistics for each
-proposal, maps them through an MLP, and adds the result to the box regression
-feature with a learnable scale. The classification path stays unchanged.
+Overlap statistics -> MLP -> correction to box regression features.
+Learnable correction scale.
 
 """
 

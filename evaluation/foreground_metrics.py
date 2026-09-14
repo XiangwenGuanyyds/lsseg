@@ -62,7 +62,7 @@ def load_ground_truth(path: Path) -> dict[int, list[dict[str, Any]]]:
         image_id = int(annotation["image_id"])
         height, width = image_sizes[image_id]
         rle = _annotation_rle(annotation, height, width)
-        # print("[debug] image", image_id, "H W:", height, width, "mask size:", rle["size"])
+        # print('[debug] image', image_id, 'mask H W', rle['size'])
         by_image[image_id].append({"id": annotation["id"], "rle": rle})
     return by_image
 
@@ -74,7 +74,7 @@ def load_predictions(path: Path) -> dict[int, list[dict[str, Any]]]:
         raise FileNotFoundError(f"prediction file not found: {path}")
     with path.open() as handle:
         predictions = json.load(handle)
-    # print("[debug] predictions loaded:", len(predictions), "from", path)
+    # print("[debug] loaded", len(predictions), path)
 
     by_image: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for prediction in predictions:
@@ -111,14 +111,13 @@ def compute_overall_pixel_metrics(
         ]
         n_gt_instances += len(image_gt)
         n_pred_instances += len(image_predictions)
-        # print("[debug] image", image_id, "GT count", len(image_gt), "pred kept", len(image_predictions), "threshold", score_threshold)
+        # print('[debug]', image_id, 'GT / pred', len(image_gt), len(image_predictions))
 
         gt_rles = [item["rle"] for item in image_gt]
         pred_rles = [item["rle"] for item in image_predictions]
         # Merge first, overlapping pixels count once.
         gt_union = mask_utils.merge(gt_rles) if gt_rles else None
         pred_union = mask_utils.merge(pred_rles) if pred_rles else None
-        # print("[debug] union mask sizes H W:", gt_union["size"] if gt_union is not None else None, pred_union["size"] if pred_union is not None else None)
         gt_area = float(mask_utils.area(gt_union)) if gt_union is not None else 0.0
         pred_area = (
             float(mask_utils.area(pred_union)) if pred_union is not None else 0.0
@@ -129,7 +128,7 @@ def compute_overall_pixel_metrics(
             intersection = iou * (pred_area + gt_area) / (1.0 + iou)
         else:
             intersection = 0.0
-        # print("[debug] areas GT / pred / intersection", gt_area, pred_area, intersection)
+        # print("[debug] areas", gt_area, pred_area, intersection)
 
         tp_pixels += intersection
         fp_pixels += pred_area - intersection
@@ -157,7 +156,7 @@ def compute_overall_pixel_metrics(
         if tp_pixels + fp_pixels + fn_pixels > 0
         else 0.0
     )
-    # print("[debug] IoU", foreground_iou, "precision", precision, "recall", recall, "F1", pixel_f1)
+    # print('[debug] IoU F1', foreground_iou, pixel_f1)
     return {
         "global_foreground_iou": foreground_iou,
         "pixel_precision": precision,

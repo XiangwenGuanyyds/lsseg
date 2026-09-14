@@ -1,10 +1,7 @@
 """RoI-level self-attention for the Mask R-CNN mask branch.
 
-Earlier experiment; unused in the final model.
-
-The module treats one complete RoI feature map as one token.  It is inserted
-between ``mask_roi_pool`` and the original ``mask_head`` and returns the same
-four-dimensional tensor shape as its input.
+Earlier experiment. One token per RoI, between mask_roi_pool and mask_head.
+Input and output: [N, C, H, W].
 """
 
 import torch
@@ -17,11 +14,8 @@ from utils import MODELS
 class RoIMaskSelfAttention(nn.Module):
     """Model relations between RoIs from the same image.
 
-    Each input RoI has shape ``[C, H, W]`` and is flattened into one vector.
-    A learned projection maps that vector to one token of size ``token_dim``.
-    Self-attention is applied independently to the RoI sequence of each image.
-    The attended token is projected back to ``C`` channels, broadcast over the
-    RoI spatial grid, and added to the original RoI feature map.
+    Flatten [C, H, W] -> token_dim. Self-attention per image.
+    Project back to C channels, broadcast and add to the RoI feature.
     """
 
     def __init__(
@@ -52,8 +46,7 @@ class RoIMaskSelfAttention(nn.Module):
         self.token_width = int(token_width)
         self.token_dim = int(token_dim)
 
-        # One complete RoI feature map becomes one token.  With the default
-        # mask RoI size, this is [256*14*14] -> [256].
+        # Default RoI token: [256*14*14] -> [256].
         self.roi_to_token = nn.Linear(
             self.in_channels * self.token_height * self.token_width,
             self.token_dim,
@@ -67,8 +60,7 @@ class RoIMaskSelfAttention(nn.Module):
         )
         self.token_to_roi = nn.Linear(self.token_dim, self.in_channels)
 
-        # This coefficient is intentionally fixed and configurable.  It is not
-        # a trainable parameter; the experiment config controls its value.
+        # Fixed scale from config.
         self.attention_scale = float(attention_scale)
 
     def forward(self, x, roi_counts=None):
@@ -99,9 +91,7 @@ class RoIMaskSelfAttention(nn.Module):
                 f"(got counts={roi_counts}, num_rois={num_rois})."
             )
 
-        # Each RoI contributes one token.  RoIs from different images are
-        # processed in separate sequences and therefore cannot attend to each
-        # other.
+        # Separate RoI sequence per image.
         tokens = self.roi_to_token(x.flatten(1))  # [N, token_dim]
 
         outputs = []

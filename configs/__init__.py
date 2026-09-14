@@ -6,7 +6,7 @@ from pathlib import Path
 
 _pkg_dir = Path(__file__).parent
 
-# Archive subdirectories are excluded.
+# Register *_cfg modules in this directory.
 for module_info in sorted(pkgutil.iter_modules([str(_pkg_dir)]),
                           key=lambda m: m.name):
     if module_info.name.endswith("_cfg"):

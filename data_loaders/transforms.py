@@ -15,11 +15,11 @@ class Compose:
     def __call__(self, image, target):
         for t in self.transforms:
             image, target = t(image, target)
-            # print(f"[Compose] transform={type(t).__name__}, image={getattr(image, 'shape', image.size)}")
+            # print('[debug]', type(t).__name__, getattr(image, 'shape', image.size))
         return image, target
 
 
-# Geometric transforms update all spatial target fields.
+# Image and target geometry.
 @TRANSFORMS.register_module()
 class Resize:
     """Resize to ``size`` (H, W) and rescale spatial target fields."""
@@ -30,7 +30,7 @@ class Resize:
     def __call__(self, image, target):
         w_old, h_old = image.size
         sw, sh = self.size[1] / w_old, self.size[0] / h_old
-        # print(f"[Resize] input_size={(h_old, w_old)}, output_size={tuple(self.size)}, scale={(sh, sw)}")
+        # print('[debug] resize', (h_old, w_old), '->', self.size)
 
         image = F.resize(image, self.size)
 
@@ -38,7 +38,7 @@ class Resize:
             target["boxes"][:, [0, 2]] *= sw
             target["boxes"][:, [1, 3]] *= sh
 
-        # Nearest-neighbour interpolation preserves binary mask values.
+        # Nearest interpolation for binary masks.
         if "masks" in target and target["masks"].numel() > 0:
             masks = target["masks"].unsqueeze(1).float()
             masks = F.resize(masks, self.size, interpolation=InterpolationMode.NEAREST)
@@ -64,7 +64,7 @@ class RandomHorizontalFlip:
 
         w, _ = image.size
         image = F.hflip(image)
-        # print(f"[RandomHorizontalFlip] image_size={image.size}, instances={len(target['labels'])}")
+        # print("[debug] flip", image.size, len(target['labels']))
 
         if "boxes" in target and target["boxes"].numel() > 0:
             boxes = target["boxes"]
@@ -80,7 +80,7 @@ class RandomHorizontalFlip:
         return image, target
 
 
-# Photometric transforms update the image only.
+# Brightness and blur.
 @TRANSFORMS.register_module()
 class RandomBrightnessContrast:
     def __init__(self, brightness=0.2, contrast=0.2, p=0.5):
@@ -109,10 +109,10 @@ class GaussianBlur:
         return image, target
 
 
-# Tensor conversion runs at the end of the configured pipeline.
+# Final tensor conversion.
 @TRANSFORMS.register_module()
 class ToTensor:
     def __call__(self, image, target):
         image = F.to_tensor(image)
-        # print(f"[ToTensor] image_shape={tuple(image.shape)}, dtype={image.dtype}, range=({image.min().item():.4f}, {image.max().item():.4f})")
+        # print('[debug] tensor', image.shape, image.dtype, image.min().item(), image.max().item())
         return image, target

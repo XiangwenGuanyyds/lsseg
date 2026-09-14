@@ -8,9 +8,8 @@ Records are saved under local_record/annotation_records/<scene>/first_round/:
     occluded.val.json, occluded.test.json
     not_occluded.val.json, not_occluded.test.json
 
-Each click saves the labels for the current split. Already labelled instances
-are skipped when continuing a session. Restart clears the not-occluded records
-and keeps the occluded records. The consensus tool reads these files directly.
+Save on each click. Resume from unlabelled instances.
+Restart clears not-occluded records and keeps occluded records.
 """
 
 import argparse
@@ -29,9 +28,7 @@ ANNOTATION_DIR = PROJECT_ROOT / "local_record" / "annotation_records"
 SPLIT_TO_RAW_SUBDIR = {"val": "valid", "test": "test"}
 
 
-# ============================================================
 # Disk helpers
-# ============================================================
 def load_id_set(path: Path) -> set:
     if not path.exists():
         return set()
@@ -46,8 +43,7 @@ def save_id_set(path: Path, ids: set) -> None:
 
 
 def load_scene_records(scene: str) -> list:
-    """Read val.coco.json + test.coco.json of one scene, flatten into per-ann
-    records preserving order (val first, then test)."""
+    """One record per annotation, val then test."""
     scene_dir = PER_SCENE_DIR / scene
     if not scene_dir.is_dir():
         raise SystemExit(f"[occlusion_round1] scene dir not found: {scene_dir}")
@@ -62,10 +58,7 @@ def load_scene_records(scene: str) -> list:
         image_map = {img["id"]: img for img in data["images"]}
         for ann in data["annotations"]:
             img = image_map[ann["image_id"]]
-            # segmentation: COCO polygon list form (list[list[float]]), each
-            # inner list flat [x1,y1,x2,y2,...] in original-image coords. RLE
-            # form (dict with counts/size) isn't drawn in JS — fall through
-            # as-is and the canvas overlay simply skips it.
+                # Polygon overlay: [x1,y1,x2,y2,...], original image coordinates.
             records.append({
                 "ann_id":       int(ann["id"]),
                 "image_id":     int(img["id"]),
@@ -79,9 +72,7 @@ def load_scene_records(scene: str) -> list:
     return records
 
 
-# ============================================================
 # Session state
-# ============================================================
 class AppState:
 
     def __init__(self, scene: str, review_mode: bool):
@@ -118,7 +109,7 @@ class AppState:
         if not review_mode:
             self._advance_to_unseen()
 
-    # --- file IO (re-read every time so disk is the source of truth) -----
+    # Read current records from disk.
     def _occluded(self, split):
         return load_id_set(self.occ_paths[split])
 
@@ -131,7 +122,7 @@ class AppState:
     def _save_viewed(self, split, ids):
         save_id_set(self.state_paths[split], ids)
 
-    # --- queue navigation ------------------------------------------------
+    # Queue navigation
     def _advance_to_unseen(self):
         while self.cursor < len(self.queue):
             r = self.queue[self.cursor]
@@ -141,7 +132,7 @@ class AppState:
             else:
                 break
 
-    # --- read snapshot for /state ---------------------------------------
+    # /state response.
     def snapshot(self):
         if self.cursor >= len(self.queue):
             current = None
@@ -170,7 +161,7 @@ class AppState:
             "n_viewed":          sum(len(self._viewed(s))   for s in ("val", "test")),
         }
 
-    # --- actions ---------------------------------------------------------
+    # Annotation actions.
     def _current_record(self):
         if self.cursor >= len(self.queue):
             return None
@@ -191,8 +182,7 @@ class AppState:
             self._advance_to_unseen()
 
     def mark_clean(self):
-        """Annotation mode 'next', or review mode 'unmark' — both move ann_id
-        to the viewed set and advance one step."""
+        """Mark not occluded and advance."""
         r = self._current_record()
         if r is None:
             return
@@ -207,20 +197,19 @@ class AppState:
             self._advance_to_unseen()
 
     def just_next(self):
-        """Review mode 'next' — no state change, just advance."""
+        """Next item in review mode."""
         if self.cursor < len(self.queue):
             self.cursor += 1
 
     def previous(self):
-        """Step one ann_id back in the queue. No state change. No skip."""
+        """Previous queue item."""
         if self.cursor > 0:
             self.cursor -= 1
         elif self.cursor >= len(self.queue) and len(self.queue) > 0:
             self.cursor = len(self.queue) - 1
 
     def restart(self):
-        """Annotation-mode only: clear viewed sets (occluded untouched), reset
-        cursor to first unseen."""
+        """Clear not-occluded records, keep occluded records, restart queue."""
         for s in ("val", "test"):
             self._save_viewed(s, set())
         self.cursor = 0
@@ -228,9 +217,7 @@ class AppState:
             self._advance_to_unseen()
 
 
-# ============================================================
 # HTTP handler
-# ============================================================
 APP: AppState = None  # set in main()
 
 
@@ -239,7 +226,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # quiet default access log
 
-    # ----- routing ------------------------------------------------------
+    # Routes
     def do_GET(self):
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
@@ -278,7 +265,7 @@ class Handler(BaseHTTPRequestHandler):
         fn()
         self._send_json(APP.snapshot())
 
-    # ----- helpers ------------------------------------------------------
+    # Response helpers.
     def _send_bytes(self, body: bytes, content_type: str):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
@@ -313,9 +300,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_bytes(f.read(), content_type)
 
 
-# ============================================================
 # Single-page UI
-# ============================================================
 HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -373,8 +358,8 @@ HTML_PAGE = r"""<!DOCTYPE html>
 <div id="actions"></div>
 
 <script>
-const FULL_MAX_W  = 1000;  // 原图显示宽度上限（超过等比缩小，bbox 框跟着缩）
-const FULL_MAX_H  = 700;   // 原图显示高度上限
+const FULL_MAX_W  = 1000;  // display width limit
+const FULL_MAX_H  = 700;   // height limit
 
 let state = null;
 let busy = false;
@@ -458,11 +443,11 @@ async function render() {
   main.style.display = "flex";
   banner.style.display = "none";
 
-  // ---- load image once, reuse for both <img> and canvas ----
+  // Shared image for preview and crop.
   const url = `/image/${cur.split}/${encodeURIComponent(cur.file_name)}`;
   const img = await loadImage(url);
 
-  // full image — fixed display size; bbox overlay scaled by the same factor
+  // Scale image and boxes together.
   const fullImg = document.getElementById("full-image");
   fullImg.src = url;
   const fullScale = Math.min(FULL_MAX_W / img.width, FULL_MAX_H / img.height, 1);
@@ -475,16 +460,14 @@ async function render() {
   overlay.style.width  = (bw * fullScale) + "px";
   overlay.style.height = (bh * fullScale) + "px";
 
-  // crop canvas — 1:1 with original image pixels (no scaling)
+  // Crop at original pixel resolution.
   const canvas = document.getElementById("crop-canvas");
   const ctx = canvas.getContext("2d");
   canvas.width  = Math.round(bw);
   canvas.height = Math.round(bh);
   ctx.drawImage(img, bx, by, bw, bh, 0, 0, canvas.width, canvas.height);
 
-  // Overlay GT mask on crop. COCO segmentation is list[list[float]] in
-  // original-image coords ([x1,y1,x2,y2,...] flat). Translate to crop-local
-  // coords via (p - bbox_origin); no scaling because canvas is 1:1.
+  // COCO polygon -> crop coordinates: point - bbox origin.
   const segs = cur.segmentation;
   if (Array.isArray(segs)) {
     ctx.fillStyle   = "rgba(60, 200, 120, 0.40)";
@@ -543,9 +526,7 @@ refresh().catch(showError);
 """
 
 
-# ============================================================
 # Entrypoint
-# ============================================================
 def main():
     parser = argparse.ArgumentParser(description="Browser-based occlusion annotator.")
     parser.add_argument("scene", choices=["pig", "frame", "stream", "mix"],

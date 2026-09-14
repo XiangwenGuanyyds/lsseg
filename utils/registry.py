@@ -21,8 +21,7 @@ class Registry:
         self._module_dict = {}
 
     def register_module(self, name=None):
-        """Decorator. If ``name`` is given, register under that key;
-        otherwise use ``cls.__name__`` (backward-compatible)."""
+        """Register by explicit name or cls.__name__."""
 
         def _register(cls):
             key = name if name is not None else cls.__name__

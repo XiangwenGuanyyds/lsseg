@@ -1,12 +1,7 @@
 """Pixel-level context correction for the Mask R-CNN mask branch.
 
-Earlier experiment; unused in the final model.
-
-The module keeps the standard mask head as the main prediction path. For each
-RoI, its spatial RoI features provide the queries, while spatial features from
-nearby RoIs provide keys and values. A relative-position bias is added to the
-attention scores, and a small decoder predicts a per-pixel mask-logit
-correction.
+Earlier experiment. Target RoI features as queries; nearby RoIs as keys and
+values. Relative-position bias and a decoder for mask-logit correction.
 """
 
 import math
@@ -68,8 +63,7 @@ class PixelContextMaskCorrection(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(self.token_dim, 1, kernel_size=1),
         )
-        # Start with no correction so the standard mask branch remains the
-        # initial reference path when this optional branch is enabled.
+        # Zero correction at initialisation.
         nn.init.zeros_(self.decoder[-1].weight)
         nn.init.zeros_(self.decoder[-1].bias)
 
@@ -143,8 +137,7 @@ class PixelContextMaskCorrection(nn.Module):
             image_boxes = boxes.to(device=x.device, dtype=x.dtype)
             neighbor_lists = self._select_neighbors(image_boxes)
 
-            # Project every RoI once. The previous implementation recomputed
-            # the same neighbor K/V projections for every target RoI.
+        # Project each RoI once.
             _, height, width = image_features.shape[1:]
             tokens = image_features.flatten(2).transpose(1, 2)  # [R, L, C]
             tokens = self.norm(tokens)

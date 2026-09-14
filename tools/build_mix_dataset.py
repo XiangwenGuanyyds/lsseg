@@ -1,46 +1,21 @@
-"""Build the per_scene/mix dataset by per-prefix subsampling within each raw split.
+"""Sample mix annotations from the four filename-prefix groups.
 
-USAGE
+Run:
     python tools/build_mix_dataset.py
     python tools/build_mix_dataset.py --seed 1
     python tools/build_mix_dataset.py --train 500 --val 100 --test 100 --seed 0
 
-DESIGN
-    For each (raw_split, out_split) pair — (train, train), (valid, val),
-    (test, test) — produce one COCO file:
+Evenly spaced sampling within each prefix; random fill from remaining images
+in the same split. Images must have source annotations.
+Images stay under dataset/raw/pigs/pig/{train,valid,test}/.
+Original image IDs, annotation IDs and categories retained.
+CATEGORY_REMAP={2:1} selects pig instances during loading.
 
-        mix/<out_split>.coco.json   ← drawn entirely from raw/<raw_split>/
-
-    Within that pair, every prefix (pig / frame / stream / I) contributes
-    target//n images, picked by the same stride-along-embedded-frame-index
-    used by the baselines (decorrelates video frames). If a prefix has
-    fewer than its share, it gives all it has and a global random sample
-    over the same raw_split's leftover pool fills the gap.
-
-    This means:
-      - mix/val.coco.json's images all live in dataset/raw/pigs/pig/valid/
-      - mix/test.coco.json's images all live in dataset/raw/pigs/pig/test/
-      - mix/train.coco.json's images all live in dataset/raw/pigs/pig/train/
-    so SPLIT_TO_RAW_SUBDIR in tools/annotate_occlusion_round1.py covers it directly,
-    and at open-source release the images for split S can be cp-ed from
-    raw/<S-or-valid>/<file_name>.
-
-    Raw image_id and ann_id are kept verbatim (same as the baseline
-    builder). Cross-split ann_id collisions are inherited from raw at the
-    natural rate (~9% for pig val/test) — not amplified.
-
-OUTPUT
+Output:
     dataset/per_scene/mix/train.coco.json
     dataset/per_scene/mix/val.coco.json
     dataset/per_scene/mix/test.coco.json
-    dataset/per_scene/mix/build_manifest.json   (audit trail)
-
-NOTES
-    - No image copying.
-    - All categories (id 0/1/2) preserved verbatim. CATEGORY_REMAP={2:1}
-      in the cfg still drops cat 0/1 at training time.
-    - Zero-annotation source images are excluded before stride, matching
-      the baseline builder's policy.
+    dataset/per_scene/mix/build_manifest.json
 """
 
 from __future__ import annotations
@@ -64,7 +39,7 @@ OUT_DIR   = REPO_ROOT / "dataset" / "per_scene" / "mix"
 SPLITS = [("train", "train"), ("valid", "val"), ("test", "test")]
 
 
-# How to recognize and sort each prefix. "I" added to the baseline set.
+# Filename patterns and sorting.
 SCENES = {
     "pig":    {"regex": re.compile(r"^pig-(\d+)-_jpg"),   "sort": "int"},
     "frame":  {"regex": re.compile(r"^frame_(\d+)_jpg"),  "sort": "int"},
@@ -82,11 +57,9 @@ def parse_args():
     return p.parse_args()
 
 
-# ----------------------------------------------------------------------
 # Sampling helpers
-# ----------------------------------------------------------------------
 def filter_and_sort(images, scene_def, annotated_ids):
-    """Pick images that match the scene AND have at least one source ann."""
+    """Annotated images matching the scene prefix."""
     pat  = scene_def["regex"]
     mode = scene_def["sort"]
     if mode == "int":
@@ -121,9 +94,6 @@ def assigned_prefix(file_name):
     return None
 
 
-# ----------------------------------------------------------------------
-# core
-# ----------------------------------------------------------------------
 def build_one_split(raw_split, out_split, target, seed):
     """Build mix/<out_split>.coco.json by drawing from raw/<raw_split>."""
     raw_ann = RAW_ROOT / raw_split / "_annotations.coco.json"
@@ -140,8 +110,7 @@ def build_one_split(raw_split, out_split, target, seed):
     n = len(SCENES)
     per_prefix = target // n
 
-    # Stride-pick from each prefix; collect the rest as the leftover pool
-    # for global fill.
+    # Stride sampling per prefix; leftovers for filling gaps.
     selected_ids = set()
     selected_imgs = []
     leftover_imgs = []
@@ -178,8 +147,7 @@ def build_one_split(raw_split, out_split, target, seed):
     else:
         fill_count = 0
 
-    # Slice annotations for selected images. ann ids and image ids are
-    # kept verbatim from raw.
+    # Annotations for selected images, original IDs.
     kept_anns = [a for a in coco["annotations"] if a["image_id"] in selected_ids]
 
     out_coco = {

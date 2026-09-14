@@ -137,7 +137,7 @@ class Dataset(torchDataset):
         image = Image.open(info['file_path']).convert("RGB")
         orig_h, orig_w = info['height'], info['width']
         anns = info['annotations']
-        # print(f"[Dataset] index={index}, image_size={image.size}, annotations={len(anns)}")
+        # print('[debug] image', index, image.size, len(anns))
 
         masks = [self._poly_to_mask(a['segmentation'], orig_h, orig_w) for a in anns]
         is_occluded = [a['id'] in self._occluded_ids for a in anns]
@@ -173,7 +173,7 @@ class Dataset(torchDataset):
         if self.transforms is not None:
             image, target = self.transforms(image, target)
 
-        # print(f"[Dataset] image_shape={tuple(image.shape)}, boxes={tuple(target['boxes'].shape)}, masks={tuple(target['masks'].shape)}, labels={tuple(target['labels'].shape)}")
+        # print("[debug] targets", target['boxes'].shape, target['masks'].shape)
 
         return image, target
 
@@ -184,5 +184,5 @@ class Dataset(torchDataset):
         for poly in polygons:
             p = np.array(poly, dtype=np.int32).reshape((-1, 1, 2))
             cv2.fillPoly(mask, [p], color=1)  # type: ignore
-        # print(f"[Dataset] polygon_count={len(polygons)}, mask_shape={mask.shape}, foreground_pixels={int(mask.sum())}")
+        # print('[debug] mask', mask.shape, 'pixels', mask.sum())
         return mask

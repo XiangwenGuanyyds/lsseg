@@ -94,8 +94,7 @@ def main():
             checkpoint_path=Path(exp_dir) / "checkpoint.pth",
         )
     else:
-        # Resolve weights: explicit --weights wins; otherwise use the named
-        # experiment's canonical training checkpoint.
+    # --weights or the experiment's training checkpoint.
         if args.weights:
             weights = Path(args.weights)
             if args.exp_name:

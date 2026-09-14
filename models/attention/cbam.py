@@ -1,17 +1,13 @@
 """Convolutional Block Attention Module (CBAM).
 
-Earlier FPN attention experiment; unused in the final model.
+Earlier FPN attention experiment.
 
-This module implements the channel-attention and spatial-attention blocks
-introduced by:
+Channel and spatial attention from:
 
     Sanghyun Woo, Jongchan Park, Joon-Young Lee, and In So Kweon.
     "CBAM: Convolutional Block Attention Module." ECCV 2018.
 
-This is an adapted implementation for this Mask R-CNN codebase. For the
-experiments here, CBAM is applied to each FPN feature map after the backbone
-and before the RPN/ROI heads, rather than being inserted inside every ResNet
-block. No official CBAM source code is copied.
+Applied to each FPN level, between the backbone and RPN/RoI heads.
 """
 
 import torch
@@ -57,13 +53,12 @@ class CBAMSpatialAttention(nn.Module):
 
 @MODELS.register_module()
 class CBAM(nn.Module):
-    """Strict CBAM (Woo et al., ECCV 2018).
+    """CBAM (Woo et al., ECCV 2018).
 
     F'  = Mc(F) ⊗ F
     F'' = Ms(F') ⊗ F'
 
-    Channel attention then spatial attention, both pure element-wise
-    multiplication. No refine conv, no extra gate, no residual.
+    Channel attention, then spatial attention. Element-wise weighting.
     """
 
     def __init__(self, in_channels=256, reduction=16, spatial_kernel=7):

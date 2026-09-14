@@ -41,7 +41,7 @@ def read_rounds(dataset_dir: Path, record_dir: Path) -> dict:
             ids = {int(value) for value in values}
             if ids - all_ids:
                 raise SystemExit(f"unknown instance IDs in {path}")
-            # Older first-round lists also contain other annotated categories.
+        # Filter labels to pig annotation IDs.
             first[label] = ids & expected
         overlap = first["occluded"] & first["not_occluded"]
         missing = expected - first["occluded"] - first["not_occluded"]

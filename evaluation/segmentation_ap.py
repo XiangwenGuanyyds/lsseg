@@ -71,10 +71,7 @@ class MaskAPEvaluator:
         return coco
 
     def _build_subsets(self, occluded_ann_ids, not_occluded_ann_ids=None):
-        """Build COCO subsets and validate the supplied group IDs.
-
-        With no occluded IDs and no explicit not-occluded set, return no groups.
-        """
+        """COCO groups from the supplied annotation IDs."""
         if not occluded_ann_ids and not_occluded_ann_ids is None:
             return {}
 
@@ -176,35 +173,29 @@ class MaskAPEvaluator:
         return out
 
     def _debug_dump(self):
-        """Print GT counts, ignored counts and a sample prediction."""
+        """GT counts and a sample prediction for inspection."""
         def _split(anns):
             elig = sum(1 for a in anns if a.get("iscrowd", 0) == 0)
             ign  = sum(1 for a in anns if a.get("iscrowd", 0) == 1)
             return elig, ign
 
-        print("[DEBUG/mask_ap] ────── COCOeval input check ──────")
-        print(f"  eval_class_ids : {self.eval_class_ids}")
-        print(f"  GT categories  : {self._gt_full.dataset['categories']}")
+        # print('[debug] classes', self.eval_class_ids)
+        # print("[debug] GT categories", self._gt_full.dataset['categories'])
         n_imgs = len(self._gt_full.dataset.get("images", []))
         e, i = _split(self._gt_full.dataset["annotations"])
-        print(f"  GT overall     : {e} eligible + {i} ignored across {n_imgs} images")
+        # print('[debug] overall', e, 'ignored', i, 'images', n_imgs)
         for grp, subset_coco in self._gt_subsets.items():
             e, i = _split(subset_coco.dataset["annotations"])
-            print(f"  GT {grp:<13}: {e} eligible + {i} ignored")
-        print(f"  Predictions    : {len(self._predictions)} entries accumulated")
+            # print("[debug]", grp, e, i)
+        # print('[debug] predictions', len(self._predictions))
         if self._predictions:
             p = self._predictions[0]
-            print(f"  Sample pred[0] : image_id={p['image_id']} "
-                  f"category_id={p['category_id']} "
-                  f"score={p['score']:.4f} "
-                  f"mask.size={p['segmentation']['size']}")
-        print("[DEBUG/mask_ap] ──────────────────────────────────")
+            # print('[debug] sample', p['image_id'], p['score'], p['segmentation']['size'])
 
     def _eval(self, gt_coco):
         if not self._predictions:
             return {"AP": 0.0, "AP50": 0.0, "AP75": 0.0}
-        # COCOeval mutates predictions; deep-copy via JSON so subset evals
-        # stay independent.
+        # Fresh copy per group; COCOeval modifies predictions.
         preds = json.loads(json.dumps(self._predictions))
         with contextlib.redirect_stdout(io.StringIO()):
             pred_coco = gt_coco.loadRes(preds)
@@ -213,6 +204,7 @@ class MaskAPEvaluator:
             ev.evaluate()
             ev.accumulate()
             ev.summarize()
+        # print("[debug] AP stats", ev.stats[:3])
         return {
             "AP":   float(ev.stats[0]),
             "AP50": float(ev.stats[1]),

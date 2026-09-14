@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# Train the baseline, then test it with standard NMS for each seed.
-# Run from the project root with the project environment active:
+# Baseline training + standard NMS testing.
+# Project root, project environment:
 #   ./run_baseline.sh                 # seed 0
 #   ./run_baseline.sh --seeds 2       # one seed
 #   ./run_baseline.sh --seeds 0 1 2   # three seeds, run in this order
 # Results: outputs/baseline_seed<N>/
-# An existing experiment directory or a failed command stops the batch.
+# Stop on existing directories or command failure.
 
 set -euo pipefail
 

@@ -9,7 +9,7 @@ from .transforms import Compose
 
 
 def build_transforms(cfg, mode='train'):
-    """Build the configured transform pipeline for one execution mode."""
+    """Transforms for train or test."""
     pipeline_cfg = cfg.TRAIN_PIPELINE if mode == 'train' else cfg.TEST_PIPELINE
 
     pipeline = []
@@ -20,7 +20,7 @@ def build_transforms(cfg, mode='train'):
         if t_cls is None:
             raise KeyError(f"{t_type} is not registered in TRANSFORMS!")
         pipeline.append(t_cls(**cfg_copy))
-    # print(f"[Transforms] mode={mode}, pipeline={[type(t).__name__ for t in pipeline]}")
+    # print('[debug] transforms', mode, [type(t).__name__ for t in pipeline])
     return Compose(pipeline)
 
 
@@ -31,13 +31,13 @@ def build_dataset(cfg, mode='train'):
     mode_upper = mode.upper()
     ann_file       = getattr(cfg, f"{mode_upper}_ANN_FILE")
     img_dir        = getattr(cfg, f"{mode_upper}_IMG_DIR")
-    # Occlusion group labels are available for validation and test data.
+    # Validation/test group labels.
     occlusion_file = getattr(cfg, f"{mode_upper}_OCCLUSION_FILE", None)
     not_occluded_file = getattr(
         cfg, f"{mode_upper}_NOT_OCCLUDED_FILE", None
     )
 
-    # Centroid configurations require one inner centre per instance mask.
+    # Mask centres for centroid experiments.
     cm_cfg = (getattr(cfg, "MODEL", {}).get("head", {}).get("centroid_module") or {})
     compute_inner_centers = bool(cm_cfg.get("enabled", False))
 
@@ -55,20 +55,18 @@ def build_dataset(cfg, mode='train'):
 
 
 def detection_collate_fn(batch):
-    """Collect variable-sized detection samples into two parallel lists.
+    """Image list and matching target list.
 
-    ``images`` contains one ``Tensor[3, H_i, W_i]`` per image. ``targets``
-    contains the corresponding target dictionaries. Mask R-CNN later resizes
-    and pads the images in ``GeneralizedRCNNTransform``.
+    Each image: Tensor[3, H_i, W_i]. Resizing/padding in the model transform.
     """
     images, targets = zip(*batch)
-    # print(f"[Collate] batch_size={len(batch)}, image_shapes={[tuple(image.shape) for image in images]}, instance_counts={[len(target['labels']) for target in targets]}")
+    # print("[debug] batch", len(images), [im.shape for im in images])
     return list(images), list(targets)
 
 
 def build_dataloader(dataset, cfg, mode='train'):
-    """Build a DataLoader for one dataset and execution mode."""
-    # print(f"[DataLoader] mode={mode}, samples={len(dataset)}, batch_size={cfg.BATCH_SIZE}, workers={cfg.NUM_WORKERS}, shuffle={mode == 'train'}")
+    """Loader for one split."""
+    # print('[debug]', mode, 'samples', len(dataset), 'workers', cfg.NUM_WORKERS)
     return DataLoader(
         dataset,
         batch_size  = cfg.BATCH_SIZE,

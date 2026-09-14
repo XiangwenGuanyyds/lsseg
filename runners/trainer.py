@@ -1,11 +1,6 @@
-"""Trainer: dataloader + model + loss + optimizer + scheduler + train loop + validate.
+"""Training loop and validation AP per epoch.
 
-Per-epoch flow:
-    train_one_epoch  -- per-step forward + backward
-    validate         -- run model over val_loader, accumulate predictions into
-                        MaskAPEvaluator, then write validation mask AP.
-
-End of fit: save ``outputs/<experiment>/training/checkpoint.pth``.
+Final weights: outputs/<experiment>/training/checkpoint.pth.
 """
 
 import csv
@@ -24,8 +19,7 @@ _TRAIN_LOG_FILES = (
     "validation_mask_ap.csv",
 )
 
-# Removed training-time diagnostics are still cleared when an experiment name
-# is reused, so old CSVs cannot be mistaken for outputs of the new run.
+# Diagnostic files to clear when reusing a run directory.
 _LEGACY_TRAIN_DIAGNOSTIC_FILES = (
     "mask_ap.csv",
     "rpn_coverage.csv",
@@ -107,7 +101,7 @@ class Trainer:
     def train_one_epoch(self, epoch):
         self.model.train()
         loss_sum, n_step = 0.0, 0
-        comp_sums = {}                   # per-component running sum across the epoch
+        comp_sums = {}                   # loss totals for this epoch
         for images, targets in self.train_loader:
             inputs = [img.to(self.device) for img in images]
             model_targets = [
@@ -118,6 +112,7 @@ class Trainer:
             ]
             loss_dict = self.model(inputs, model_targets)
             total_loss, weighted = self.criterion(loss_dict)
+            # print('[debug] losses', weighted, 'lr', self.optimizer.param_groups[0]['lr'])
             self.optimizer.zero_grad()
             total_loss.backward()
             self.optimizer.step()
@@ -133,12 +128,9 @@ class Trainer:
         return means
 
     def _append_train_loss_csv(self, epoch, means):
-        """Write one row per epoch to ``training/metrics/train_losses.csv``.
+        """Append epoch losses to training/metrics/train_losses.csv.
 
-        Header is decided by the first epoch's loss component keys (``means``
-        from train_one_epoch). Subsequent epochs reuse the original header;
-        new keys appearing later are silently dropped, missing keys default
-        to 0.0 — consistent with how the file was opened initially.
+        First epoch sets the columns. Missing terms default to zero.
         """
         csv_path = os.path.join(self.log_dir, "train_losses.csv")
         if not os.path.exists(csv_path):
@@ -159,8 +151,7 @@ class Trainer:
         self.model.state = {
             "epoch":       epoch,
             "log_dir":     self.log_dir,
-            # Stage diagnostics are final-test outputs, not per-epoch
-            # validation outputs.
+            # Validation AP only.
             "diagnostics": {},
             "mask_ap_filename": "validation_mask_ap.csv",
         }

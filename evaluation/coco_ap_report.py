@@ -29,10 +29,8 @@ def _evaluate(gt_path, predictions, iou_type):
         return {"AP": 0.0, "AP50": 0.0, "AP75": 0.0}
 
     gt = _load_coco(gt_path)
-    # print("[debug] gt:", gt_path, "images:", len(gt.imgs))
-    # print("[debug] iou type:", iou_type, "prediction count:", len(predictions))
-    # COCOeval mutates its inputs. Copy the predictions so bbox and segm
-    # evaluations, as well as the three groups, remain independent.
+    # print('[debug] GT', len(gt.imgs), gt_path)
+    # Fresh predictions per evaluation; COCOeval modifies them.
     predictions = json.loads(json.dumps(predictions))
     with contextlib.redirect_stdout(io.StringIO()):
         pred_coco = gt.loadRes(predictions)
@@ -41,7 +39,7 @@ def _evaluate(gt_path, predictions, iou_type):
         evaluator.accumulate()
         evaluator.summarize()
     # print("[debug] COCO result annotations", len(pred_coco.anns))
-    # print("[debug] raw evaluator.stats:", evaluator.stats)
+    # print('[debug]', iou_type, evaluator.stats[:3])
     metrics = {
         "AP": float(evaluator.stats[0]),
         "AP50": float(evaluator.stats[1]),
@@ -68,7 +66,7 @@ def build_coco_ap_rows(exp_dir):
         if not gt_path.exists():
             continue
         for iou_type in ("bbox", "segm"):
-            # print("[debug] evaluating group/type:", group, iou_type)
+            # print('[debug] group', group, iou_type)
             metrics = _evaluate(gt_path, predictions, iou_type)
             rows.append({
                 "exp_name": exp_dir.parent.name,

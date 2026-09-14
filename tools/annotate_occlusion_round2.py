@@ -2,7 +2,6 @@
 
 Run: python tools/annotate_occlusion_round2.py <scene>
 Labels and event logs are saved in local_record/annotation_records/<scene>/v2/.
-This tool reads and saves only the second round.
 """
 
 from __future__ import annotations

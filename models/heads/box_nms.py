@@ -83,9 +83,9 @@ def thresholded_gaussian_soft_nms(
     the selected box exceeds nms_thresh.
     """
     if not 0 <= nms_thresh <= 1:
-        raise ValueError("Thresholded Gaussian NMS threshold must be in [0, 1]")
+        raise ValueError("Thresholded Gaussian Soft-NMS threshold must be in [0, 1]")
     if sigma <= 0:
-        raise ValueError("Thresholded Gaussian NMS sigma must be positive")
+        raise ValueError("Thresholded Gaussian Soft-NMS sigma must be positive")
     if score_thresh_keep < 0:
         raise ValueError("Soft-NMS score_thresh_keep must be non-negative")
 

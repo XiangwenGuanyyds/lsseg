@@ -2,7 +2,6 @@
 
 P2 features and coarse mask logits go into the residual predictor.
 The uncertainty weight scales the residual before adding it to the coarse mask.
-Encoder size and weighting options come from config.
 """
 
 from collections.abc import Mapping, Sequence
@@ -17,7 +16,7 @@ from utils import MODELS
 
 @MODELS.register_module()
 class ResidualMaskRefinementHead(nn.Module):
-    """Refine one foreground mask-logit channel with high-resolution features."""
+    """Current-instance mask correction from high-resolution RoI features."""
 
     def __init__(
         self,
@@ -68,7 +67,7 @@ class ResidualMaskRefinementHead(nn.Module):
         self.foreground_class = int(foreground_class)
         self.detach_coarse_context = bool(detach_coarse_context)
         self.use_uncertainty_weight = bool(use_uncertainty_weight)
-        # Predictor input uses the weight only when uncertainty weighting is enabled.
+        # Optional weight input to the predictor.
         self.use_uncertainty_weight_in_predictor = bool(
             self.use_uncertainty_weight and use_uncertainty_weight_in_predictor
         )
@@ -76,9 +75,7 @@ class ResidualMaskRefinementHead(nn.Module):
         self.high_resolution_encoder_mode = str(high_resolution_encoder_mode)
         self.refinement_feature_channels = int(refinement_feature_channels)
 
-        # Reuse torchvision's MultiScaleRoIAlign implementation unchanged.
-        # Restricting featmap_names to ("0",) selects the existing FPN P2 map;
-        # no torchvision pooling or coordinate-transform code is reimplemented.
+        # featmap_names=("0",) selects P2.
         self.high_resolution_roi_pool = MultiScaleRoIAlign(
             featmap_names=list(self.featmap_names),
             output_size=self.roi_output_size,
@@ -106,7 +103,7 @@ class ResidualMaskRefinementHead(nn.Module):
             )
             residual_feature_channels = int(hidden_channels)
         elif self.high_resolution_encoder_mode == "conv1x1":
-            # Combine feature channels with one 1x1 convolution.
+            # 1x1 channel reduction.
             self.high_resolution_encoder = nn.Sequential(
                 nn.Conv2d(
                     int(in_channels),
@@ -147,13 +144,12 @@ class ResidualMaskRefinementHead(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
-        # Zero initialization makes the optional path initially return the
-        # coarse logits aligned to the configured refinement grid.
+        # Start with zero residual.
         nn.init.zeros_(self.residual_predictor[-1].weight)
         nn.init.zeros_(self.residual_predictor[-1].bias)
 
     def _align_to_output_size(self, tensor):
-        """Resize a spatial tensor only when the configured grid requires it."""
+        """Bilinear resize to the output grid."""
         if tuple(tensor.shape[-2:]) == self.output_size:
             return tensor
         return F.interpolate(
@@ -207,12 +203,14 @@ class ResidualMaskRefinementHead(nn.Module):
             boxes,
             image_shapes,
         )
+        # print('[debug] P2 RoIs', high_resolution_features.shape)
         high_resolution_features = self.high_resolution_encoder(
             high_resolution_features
         )
         high_resolution_features = self._align_to_output_size(
             high_resolution_features
         )
+        # print("[debug] after conv + resize:", high_resolution_features.shape)
 
         coarse_instance_logits = aligned_logits[
             :, self.foreground_class : self.foreground_class + 1
@@ -233,6 +231,7 @@ class ResidualMaskRefinementHead(nn.Module):
                 stride=1,
                 padding=self.uncertainty_pool_kernel_size // 2,
             )
+            # print('[debug] weight range', uncertainty_weight.min().item(), uncertainty_weight.max().item())
         else:
             uncertainty_weight = None
 
@@ -248,10 +247,12 @@ class ResidualMaskRefinementHead(nn.Module):
             )
 
         residual_logits = self.residual_predictor(residual_input)
+        # print("[debug] residual", residual_input.shape, '->', residual_logits.shape)
         if uncertainty_weight is None:
             refined_instance_logits = coarse_instance_logits + residual_logits
         else:
             refined_instance_logits = coarse_instance_logits + uncertainty_weight * residual_logits
+        # print('[debug] refined mask', refined_instance_logits.shape)
 
         return torch.cat(
             (

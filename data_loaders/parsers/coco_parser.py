@@ -83,7 +83,7 @@ class COCOParser(BaseParser):
             msg += (f" Category remap {self.category_remap} dropped "
                     f"{n_dropped_cat} annotation(s).")
         print(msg)
-        # print(f"[COCOParser] categories={self.categories}, records={len(final_list)}, annotations={sum(len(item['annotations']) for item in final_list)}")
+        # print('[debug] records', len(final_list), self.categories)
         return final_list
 
     def _build_category_list(self, all_categories):
@@ -151,5 +151,5 @@ class COCOParser(BaseParser):
     def _coco_bbox_to_pascal(bbox):
         """COCO ``[x, y, w, h]`` -> Pascal ``[x1, y1, x2, y2]``."""
         converted = [bbox[0], bbox[1], bbox[0] + bbox[2], bbox[1] + bbox[3]]
-        # print(f"[COCOParser] bbox_xywh={bbox}, bbox_xyxy={converted}")
+        # print("[debug] box", bbox, '->', converted)
         return converted
