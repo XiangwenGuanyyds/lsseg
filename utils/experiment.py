@@ -59,6 +59,8 @@ def train(args):
         command.extend(["--config", args.config])
     _append_override(command, "--num_workers", args.num_workers)
     _append_override(command, "--batch_size", args.batch_size)
+    if args.validation_loss:
+        command.append("--validation-loss")
     _run_main(command)
 
 
@@ -230,6 +232,8 @@ def build_parser():
     train_parser.add_argument("--seed", required=True, type=int)
     train_parser.add_argument("--num-workers", type=int)
     train_parser.add_argument("--batch-size", type=int)
+    train_parser.add_argument("--validation-loss", action="store_true",
+                              help="record validation loss each epoch")
     train_parser.set_defaults(func=train)
 
     test_parser = subparsers.add_parser("test", help="test a trained experiment")

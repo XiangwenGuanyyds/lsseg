@@ -1,11 +1,13 @@
-"""Training loop and validation AP per epoch.
+"""Training loop, validation AP and optional validation loss per epoch.
 
 Final weights: outputs/<experiment>/training/checkpoint.pth.
 """
 
 import csv
 import os
+import random
 
+import numpy as np
 import torch
 
 from data_loaders.build import build_dataloader, build_dataset
@@ -17,6 +19,7 @@ from optim import build_optimizer
 _TRAIN_LOG_FILES = (
     "train_losses.csv",
     "validation_mask_ap.csv",
+    "validation_losses.csv",
 )
 
 # Diagnostic files to clear when reusing a run directory.
@@ -91,9 +94,15 @@ class Trainer:
         for epoch in range(self.epochs):
             train_means = self.train_one_epoch(epoch)
             val_ap      = self.validate(epoch)
-            self._append_train_loss_csv(epoch, train_means)
+            val_text = ""
+            if getattr(self.cfg, "VALIDATION_LOSS", False):
+                val_means = self.validate_loss()
+                self._append_loss_csv(epoch, val_means, "validation_losses.csv")
+                val_text = f"  val_loss={val_means['total']:.4f}"
+            self._append_loss_csv(epoch, train_means, "train_losses.csv")
             print(f"[epoch {epoch + 1}/{self.epochs}]  "
-                  f"train_loss={train_means['total']:.4f}  val_AP={val_ap:.4f}")
+                  f"train_loss={train_means['total']:.4f}  val_AP={val_ap:.4f}"
+                  f"{val_text}", flush=True)
 
         torch.save(self.model.state_dict(),
                    os.path.join(self.exp_dir, "checkpoint.pth"))
@@ -127,12 +136,56 @@ class Trainer:
             means[k] = v / n
         return means
 
-    def _append_train_loss_csv(self, epoch, means):
-        """Append epoch losses to training/metrics/train_losses.csv.
+    def validate_loss(self):
+        """Validation loss with fixed RoI sampling and frozen normalisation."""
+        modes = [(module, module.training) for module in self.model.modules()]
+        state = self.model.state
+        python_rng = random.getstate()
+        numpy_rng = np.random.get_state()
+        devices = list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
+        sums, steps = {}, 0
+        try:
+            # Keep the extra validation pass separate from training randomness.
+            with torch.random.fork_rng(devices=devices), torch.no_grad():
+                seed = int(getattr(self.cfg, "SEED", 0))
+                random.seed(seed)
+                np.random.seed(seed)
+                torch.manual_seed(seed)
+                # RPN and RoI heads return losses in training mode.
+                self.model.train()
+                self.model.state = None
+                self.model.transform.eval()
+                for module in self.model.modules():
+                    if isinstance(module, (torch.nn.modules.batchnorm._BatchNorm,
+                                           torch.nn.modules.dropout._DropoutNd)):
+                        module.eval()
+                for images, targets in self.val_loader:
+                    inputs = [image.to(self.device) for image in images]
+                    model_targets = [
+                        {key: target[key].to(self.device)
+                         for key in ("boxes", "labels", "masks")}
+                        for target in targets
+                    ]
+                    losses = self.model(inputs, model_targets)
+                    total, weighted = self.criterion(losses)
+                    if not torch.isfinite(total):
+                        raise RuntimeError("Non-finite validation loss")
+                    for key, value in {"total": total.item(), **weighted}.items():
+                        sums[key] = sums.get(key, 0.0) + value
+                    steps += 1
+        finally:
+            for module, training in modes:
+                module.training = training
+            self.model.state = state
+            random.setstate(python_rng)
+            np.random.set_state(numpy_rng)
+        if steps == 0:
+            raise RuntimeError("Validation loader is empty")
+        return {key: value / steps for key, value in sums.items()}
 
-        First epoch sets the columns. Missing terms default to zero.
-        """
-        csv_path = os.path.join(self.log_dir, "train_losses.csv")
+    def _append_loss_csv(self, epoch, means, filename):
+        """Epoch loss means; columns set on the first write."""
+        csv_path = os.path.join(self.log_dir, filename)
         if not os.path.exists(csv_path):
             comp_keys = sorted(k for k in means.keys() if k != "total")
             fields = ["epoch", "total"] + comp_keys

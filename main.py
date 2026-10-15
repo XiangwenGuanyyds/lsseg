@@ -37,12 +37,16 @@ def main():
                    help="override cfg.NUM_WORKERS for this run")
     p.add_argument("--batch_size", type=int, default=None,
                    help="override cfg.BATCH_SIZE for this run")
+    p.add_argument("--validation-loss", action="store_true",
+                   help="record validation loss after each training epoch")
     p.add_argument(
         "--no-diagnostics",
         action="store_true",
         help="disable optional pipeline diagnostics during testing",
     )
     args = p.parse_args()
+    if args.validation_loss and args.mode != "train":
+        p.error("--validation-loss requires --mode train")
 
     if args.config_file:
         cfg, config_name = load_saved_config(args.config_file, Path(__file__).resolve().parent)
@@ -66,6 +70,8 @@ def main():
         cfg.BATCH_SIZE = args.batch_size
     if args.no_diagnostics:
         cfg.DIAGNOSTICS = {}
+    if args.validation_loss:
+        cfg.VALIDATION_LOSS = True
 
     seed = getattr(cfg, "SEED", None)
     if seed is not None:

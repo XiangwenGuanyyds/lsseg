@@ -119,7 +119,7 @@ class Tester:
         for grp in ("overall", "occluded", "not_occluded"):
             d = result.get(grp)
             if d is None:
-                print(f"{grp:16s}{'─':>14s}{'─':>10s}{'─':>10s}  (无数据)")
+                print(f"{grp:16s}{'─':>14s}{'─':>10s}{'─':>10s}  (no data)")
                 continue
             print(f"{grp:16s}{d['AP']:>14.4f}{d['AP50']:>10.4f}{d['AP75']:>10.4f}")
         print("=" * 50)

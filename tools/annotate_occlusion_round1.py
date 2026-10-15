@@ -341,19 +341,19 @@ HTML_PAGE = r"""<!DOCTYPE html>
 
 <div id="main">
   <div>
-    <div id="full-label">原图（红框 = 当前实例 bbox）</div>
+    <div id="full-label">Original image (red box = current instance bbox)</div>
     <div id="full-container">
       <img id="full-image" src="">
       <div id="bbox-overlay"></div>
     </div>
   </div>
   <div>
-    <div id="crop-label">bbox 抠图</div>
+    <div id="crop-label">Bounding box crop</div>
     <canvas id="crop-canvas" width="0" height="0"></canvas>
   </div>
 </div>
 
-<div id="done-banner" style="display:none">— 队列已结束 —</div>
+<div id="done-banner" style="display:none">End of queue</div>
 
 <div id="actions"></div>
 
@@ -371,7 +371,7 @@ function setBusy(value) {
 
 function showError() {
   document.getElementById('actions').style.display = 'none';
-  alert('保存或加载失败，请刷新页面核对当前进度后继续。');
+  alert('Save or load failed. Refresh the page and check your progress before continuing.');
 }
 
 async function refresh() {
@@ -412,7 +412,7 @@ function loadImage(url) {
 
 async function render() {
   document.getElementById("title").textContent =
-    `场景 [${state.scene}] · ${state.mode === "review" ? "查看遮挡" : "标注"}模式`;
+    `Scene [${state.scene}] - ${state.mode === "review" ? "Occlusion review" : "Annotation"}`;
 
   const cur = state.current;
   const main = document.getElementById("main");
@@ -424,19 +424,19 @@ async function render() {
   const occN = state.n_occluded, viewN = state.n_viewed, total = state.n_total_records;
   if (state.mode === "annotation") {
     counters.innerHTML =
-      `已判定 ${occN + viewN}/${total}` +
-      `（遮挡 ${occN} · 非遮挡 ${viewN}）` +
-      (cur ? ` · 当前位置 ${cur.position}/${cur.queue_total}` : "");
+      `Labelled ${occN + viewN}/${total}` +
+      ` (occluded ${occN}, not occluded ${viewN})` +
+      (cur ? ` - Position ${cur.position}/${cur.queue_total}` : "");
   } else {
     counters.innerHTML =
-      `共 ${occN} 个遮挡` +
-      (cur ? ` · 当前位置 ${cur.position}/${cur.queue_total}` : "");
+      `Occluded instances: ${occN}` +
+      (cur ? ` - Position ${cur.position}/${cur.queue_total}` : "");
   }
 
   if (!cur) {
     main.style.display = "none";
     banner.style.display = "block";
-    actions.innerHTML = `<button class="secondary" onclick="action('previous')">上一张</button>`;
+    actions.innerHTML = `<button class="secondary" onclick="action('previous')">Previous</button>`;
     return;
   }
 
@@ -489,32 +489,32 @@ async function render() {
   }
 
   // split + state badges appended to title
-  const labelMap = {occluded: "已标遮挡", viewed: "已标非遮挡", unseen: "未判定"};
+  const labelMap = {occluded: "Occluded", viewed: "Not occluded", unseen: "Unlabelled"};
   document.getElementById("title").innerHTML =
-    `场景 [${state.scene}] · ${state.mode === "review" ? "查看遮挡" : "标注"}模式 ` +
+    `Scene [${state.scene}] - ${state.mode === "review" ? "Occlusion review" : "Annotation"} ` +
     `<span class="badge badge-split-${cur.split}">${cur.split}</span> ` +
     `<span class="badge badge-${cur.current_state}">${labelMap[cur.current_state]}</span>`;
 
   // buttons
   if (state.mode === "annotation") {
     actions.innerHTML = `
-      <button class="primary"   onclick="action('mark_occluded')">标记遮挡</button>
-      <button class="secondary" onclick="action('mark_clean')">下一张（非遮挡）</button>
-      <button class="secondary" onclick="action('previous')">上一张</button>
-      <button class="restart"   onclick="confirmRestart()">重新开始</button>
+      <button class="primary"   onclick="action('mark_occluded')">Mark occluded</button>
+      <button class="secondary" onclick="action('mark_clean')">Next (not occluded)</button>
+      <button class="secondary" onclick="action('previous')">Previous</button>
+      <button class="restart"   onclick="confirmRestart()">Restart</button>
     `;
   } else {
     actions.innerHTML = `
-      <button class="primary"   onclick="action('unmark_occluded')">改为非遮挡</button>
-      <button class="secondary" onclick="action('next')">下一张</button>
-      <button class="secondary" onclick="action('previous')">上一张</button>
+      <button class="primary"   onclick="action('unmark_occluded')">Change to not occluded</button>
+      <button class="secondary" onclick="action('next')">Next</button>
+      <button class="secondary" onclick="action('previous')">Previous</button>
     `;
   }
 }
 
 function confirmRestart() {
   if (busy) return;
-  if (confirm("确定要重新开始吗？\n所有'非遮挡'判定会被清空（已标遮挡保留）。")) {
+  if (confirm("Restart?\nAll 'not occluded' labels will be cleared. Occluded labels will be kept.")) {
     action("restart");
   }
 }
