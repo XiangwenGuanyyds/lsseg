@@ -20,7 +20,7 @@ The model downloads ImageNet-pretrained ResNet-50 weights on first use.
 
 ## Dataset
 
-Download `dataset.zip` from [tubCloud](https://tubcloud.tu-berlin.de/s/LDbXc9o3yyAF8fi).
+Download `dataset.zip` from [tubCloud](https://tubcloud.tu-berlin.de/s/eAt388JFg2QpSeW).
 Password: `gxwlsseg2026`.
 
 Extract it into the project root so that `dataset/` sits beside `main.py`:
